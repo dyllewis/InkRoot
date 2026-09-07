@@ -138,7 +138,7 @@ InkRoot 是 Flutter 跨平台应用。核心业务代码在 `lib/`，各平台�
 - `lib/screens/webdav_settings_screen.dart`：WebDAV 设置和测试入口。
 - `lib/services/database_service.dart`：本地数据库和迁移。
 - `lib/services/api_service.dart`：服务端 API 抽象。
-- `lib/services/api_service_factory.dart`：本地模式、官方服务器、自托管服务器之间的服务创建。
+- `lib/services/api_service_factory.dart`：本地模式与自托管服务器之间的服务创建。
 - `lib/services/memos_api_service_fixed.dart`：Memos API 对接。
 - `lib/services/memos_resource_service.dart`：Memos 图片和资源处理。
 - `lib/services/incremental_sync_service.dart`：增量同步。
@@ -216,7 +216,7 @@ InkRoot 是 Flutter 跨平台应用。核心业务代码在 `lib/`，各平台�
 - `laboratory_screen.dart`：实验室页面，目前作为开发中占位。
 - `legal_document_screen.dart`：法律文档聚合页。
 - `local_backup_restore_screen.dart`：本地备份和恢复页面。
-- `login_screen.dart`：登录、官方服务器和自部署服务器连接入口。
+- `login_screen.dart`：登录与自部署服务器连接入口。
 - `note_detail_screen.dart`：笔记详情、编辑、图片、AI、相关笔记和更多操作入口。
 - `notifications_screen.dart`：通知和提醒列表。
 - `notion_settings_screen.dart`：Notion 同步配置页。
@@ -243,13 +243,11 @@ InkRoot 是 Flutter 跨平台应用。核心业务代码在 `lib/`，各平台�
 - `ai_related_notes_service.dart`：AI 相关笔记能力。
 - `ai_review_service.dart`：AI 点评能力。
 - `alert_service.dart`：告警规则和关键指标告警。
-- `announcement_service.dart`：公告拉取、缓存和展示判断。
 - `api_service.dart`：应用服务端 API 抽象。
-- `api_service_factory.dart`：根据本地模式、官方服务器、自部署服务器创建 API 服务。
+- `api_service_factory.dart`：根据本地模式或自部署服务器创建 API 服务。
 - `app_info_service.dart`：应用版本、包信息和平台信息。
 - `baidu_realtime_speech_service.dart`：百度实时语音识别。
 - `baidu_speech_service.dart`：百度语音识别封装。
-- `cloud_verification_service.dart`：官方服务器校验、AppID/AppKey 验证和登录前置检查。
 - `database_service.dart`：SQLite 本地数据库、表结构、迁移、读写和缓存。
 - `deepseek_api_service.dart`：DeepSeek/OpenAI 兼容 AI API 调用。
 - `feature_flag_service.dart`：功能开关、本地缓存和远程配置读取。

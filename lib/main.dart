@@ -1,12 +1,9 @@
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:http/http.dart' as http;
 import 'package:inkroot/config/app_config.dart' as Config;
 import 'package:inkroot/l10n/app_localizations_simple.dart';
 import 'package:inkroot/models/app_config_model.dart';
@@ -29,7 +26,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'package:url_launcher/url_launcher.dart';
 
 // 🔥 全局NavigatorKey，用于通知点击跳转
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -492,126 +488,10 @@ class _MyAppState extends State<MyApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FlutterNativeSplash.remove();
     });
-    _checkForUpdates();
   }
 
-  Future<void> _checkForUpdates() async {
-    try {
-      // 获取当前版本
-      final currentVersion = Config.AppConfig.appVersion;
-
-      // 获取服务器版本
-      final response =
-          await http.get(Uri.parse(Config.AppConfig.getCloudNoticeUrl()));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final versionInfo = data['versionInfo'] as Map<String, dynamic>;
-        final serverVersion = versionInfo['versionName'] as String;
-
-        // 比较版本号
-        if (_shouldUpdate(currentVersion, serverVersion)) {
-          if (mounted) {
-            _showUpdateDialog(versionInfo);
-          }
-        }
-      }
-    } on Object {
-      // 检查更新失败，静默处理
-    }
-  }
-
-  bool _shouldUpdate(String currentVersion, String serverVersion) {
-    try {
-      final current = currentVersion.split('.').map(int.parse).toList();
-      final server = serverVersion.split('.').map(int.parse).toList();
-
-      // 确保两个列表长度相同
-      while (current.length < server.length) {
-        current.add(0);
-      }
-      while (server.length < current.length) {
-        server.add(0);
-      }
-
-      // 比较每个版本号部分
-      for (var i = 0; i < current.length; i++) {
-        if (server[i] > current[i]) {
-          return true;
-        }
-        if (server[i] < current[i]) {
-          return false;
-        }
-      }
-
-      return false;
-    } on Object {
-      return false;
-    }
-  }
-
-  void _showUpdateDialog(Map<String, dynamic> versionInfo) {
-    final forceUpdate = versionInfo['forceUpdate'] as bool? ?? false;
-    final releaseNotes =
-        (versionInfo['releaseNotes'] as List<dynamic>?) ?? <dynamic>[];
-
-    unawaited(
-      showDialog<void>(
-        context: context,
-        barrierDismissible: !forceUpdate,
-        builder: (context) {
-          final l10n = AppLocalizationsSimple.of(context);
-          return AlertDialog(
-            title: Text(l10n?.newVersionAvailable ?? 'New Version Available'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n?.updateAvailableMessage ??
-                      'A new version is available. Update now to experience new features!',
-                ),
-                const SizedBox(height: 16),
-                Text(l10n?.updateNotes ?? "What's New:"),
-                ...releaseNotes.map(
-                  (note) => Padding(
-                    padding: const EdgeInsets.only(left: 16, top: 4),
-                    child: Text('• $note'),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              if (!forceUpdate)
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(l10n?.remindMeLater ?? 'Remind Me Later'),
-                ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  final downloadUrls =
-                      versionInfo['downloadUrls'] as Map<String, dynamic>;
-                  final url = downloadUrls['android'] as String;
-                  try {
-                    if (await canLaunchUrl(Uri.parse(url))) {
-                      await launchUrl(
-                        Uri.parse(url),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
-                  } on Object {
-                    // 启动下载链接失败，静默处理
-                  }
-                },
-                child: Text(l10n?.updateNow ?? 'Update Now'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+  // 应用内更新检查已随云验证服务移除：InkRoot 是纯自托管客户端，
+  // 新版本通过 GitHub Releases / 应用商店获取，应用内不再弹更新框。
 
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider.value(

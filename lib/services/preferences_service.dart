@@ -29,8 +29,7 @@ class PreferencesService {
   static const String _iflytekApiSecretSecureKey = 'iflytek_api_secret';
   static const String _webDavPasswordSecureKey = 'webdav_password';
 
-  // 🎯 大厂标准：服务器选择偏好（登录/注册页共享）
-  static const String _useCustomServerKey = 'use_custom_server';
+  // 🎯 服务器地址记忆（登录/注册页共享）
   static const String _customServerUrlKey = 'custom_server_url';
 
   // 🔒 安全存储配置：卸载时自动清除数据（符合银行App标准）
@@ -403,28 +402,16 @@ class PreferencesService {
       _storage.delete(key: _webDavPasswordSecureKey);
 
   // ========================================
-  // 🎯 大厂标准：服务器选择偏好管理（登录/注册页共享）
+  // 🎯 服务器地址记忆（登录/注册页共享）
   // ========================================
 
-  /// 保存是否使用自定义服务器的偏好
-  Future<void> saveUseCustomServer(bool useCustom) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useCustomServerKey, useCustom);
-  }
-
-  /// 获取是否使用自定义服务器的偏好
-  Future<bool> getUseCustomServer() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_useCustomServerKey) ?? false;
-  }
-
-  /// 保存自定义服务器地址
+  /// 保存上次使用的自建服务器地址
   Future<void> saveCustomServerUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_customServerUrlKey, url);
   }
 
-  /// 获取自定义服务器地址
+  /// 获取上次使用的自建服务器地址
   Future<String?> getCustomServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_customServerUrlKey);

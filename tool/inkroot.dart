@@ -7,8 +7,6 @@ Future<void> main(List<String> args) async {
 }
 
 class InkRootCli {
-  static const String _cloudVerifyAppId = '10002';
-  static const String _cloudVerifyAppKey = 'RLu4EGglybXSgRzK';
   static const String _androidReleaseCertSha256 =
       '7A:00:C9:A1:AC:E1:AC:15:0E:79:0C:9D:7A:5B:FC:37:A3:F1:A1:2F:0D:F5:9D:ED:86:27:17:93:C8:40:99:8D';
 
@@ -189,16 +187,6 @@ class InkRootCli {
       '.github/workflows/release.yml',
       'expected release certificate found',
       'Release workflow must verify Android package certificates.',
-    );
-    await _assertFileContains(
-      'lib/config/app_config.dart',
-      "static const String appId = '$_cloudVerifyAppId';",
-      'Cloud verification AppID must stay fixed in source.',
-    );
-    await _assertFileContains(
-      'lib/config/app_config.dart',
-      "defaultValue: '$_cloudVerifyAppKey'",
-      'Cloud verification AppKey must keep the official default in source.',
     );
 
     stdout.writeln('Store checks passed for $version.');
@@ -414,16 +402,12 @@ class InkRootCli {
 
   List<String> _dartDefines({required bool isRelease}) {
     final defines = <String>[];
-    final cloudVerifyAppKey = _envValue('CLOUD_VERIFY_APP_KEY');
     final environment = _envValue('ENVIRONMENT');
 
     defines.add(
       '--dart-define=ENVIRONMENT=${environment ?? (isRelease ? 'production' : 'development')}',
     );
 
-    if (cloudVerifyAppKey != null) {
-      defines.add('--dart-define=CLOUD_VERIFY_APP_KEY=$cloudVerifyAppKey');
-    }
     for (final key in _optionalBuildDefineKeys) {
       final value = _envValue(key);
       if (value != null) {
@@ -437,10 +421,7 @@ class InkRootCli {
   Map<String, String>? _dartDefineEnvironment() {
     final values = <String, String>{};
     values['ENVIRONMENT'] = _envValue('ENVIRONMENT') ?? 'production';
-    for (final key in [
-      'CLOUD_VERIFY_APP_KEY',
-      ..._optionalBuildDefineKeys,
-    ]) {
+    for (final key in _optionalBuildDefineKeys) {
       final value = _envValue(key);
       if (value != null) {
         values[key] = value;

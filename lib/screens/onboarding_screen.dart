@@ -45,7 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
       OnboardingPage(
         title: l10n?.onboardingTitle3 ?? '随时随地同步',
-        description: l10n?.onboardingDesc3 ?? '可连接官方服务器或自部署 Memos，多端同步由你选择',
+        description: l10n?.onboardingDesc3 ?? '可连接自己部署的 Memos 服务端，多端同步由你选择',
         iconData: Icons.sync_rounded,
         gradient: [AppTheme.primaryLightColor, AppTheme.accentColor],
       ),

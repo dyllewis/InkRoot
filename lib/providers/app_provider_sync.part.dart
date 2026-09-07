@@ -162,7 +162,15 @@ extension AppProviderSyncPart on AppProvider {
 
       // 检查是否为Token过期异常
       if (e is TokenExpiredException || sync_status.isTokenExpiredError(e)) {
-        debugPrint('AppProvider: 检测到Token过期，强制用户重新登录');
+        debugPrint('AppProvider: 检测到Token过期，先尝试静默重登');
+        final relogged = await trySilentRelogin();
+        if (relogged) {
+          _setSyncMessage('已自动恢复登录状态');
+          // 重登成功后重试一次同步；静默重登的冷却机制保证不会无限循环
+          await fetchNotesFromServer();
+          return;
+        }
+        debugPrint('AppProvider: 静默重登失败，强制用户重新登录');
         _setSyncMessage('登录已过期，请重新登录');
         await _handleTokenExpired();
         return;
@@ -170,9 +178,15 @@ extension AppProviderSyncPart on AppProvider {
 
       _setSyncMessage(sync_status.syncFailedMessage(e));
 
-      // 如果是API服务初始化失败，尝试清除登录状态
+      // API服务初始化失败通常是暂时性的（网络波动、服务尚未就绪）：
+      // 先尝试用保存的凭据恢复；恢复不了就回落本地模式，保留登录信息，
+      // 不再直接强制登出（凭据若真的失效，会在下次成功连接时走 Token 过期路径）。
       if (e.toString().contains('API服务初始化失败')) {
-        await logout(force: true);
+        if (await trySilentRelogin()) {
+          await fetchNotesFromServer();
+          return;
+        }
+        _setSyncMessage('暂时无法连接服务器，已切换离线模式');
       }
 
       debugPrint('AppProvider: 保留本地数据');

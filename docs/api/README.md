@@ -119,9 +119,9 @@ https://your-memos-server.com
 http://localhost:5230
 ```
 
-### Official Demo (Testing Only)
+### Self-Hosted Server
 ```
-https://memos.didichou.site
+https://your-memos-server.com
 ```
 
 ---

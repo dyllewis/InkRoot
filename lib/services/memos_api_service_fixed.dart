@@ -269,6 +269,8 @@ class MemosApiServiceFixed {
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'passwordCredentials': {'username': username, 'password': password},
+        // 会话默认约 7 天过期；传 true 拿到永不过期的会话，避免用户被自动登出
+        'neverExpire': true,
       }),
     );
     if (resp.statusCode == 200) {
@@ -289,7 +291,7 @@ class MemosApiServiceFixed {
       Uri.parse('$baseUrl/api/v1/auth/signin'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode(
-        {'username': username, 'password': password, 'neverExpire': false},
+        {'username': username, 'password': password, 'neverExpire': true},
       ),
     );
 

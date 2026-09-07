@@ -1,42 +1,28 @@
 # InkRoot
 
-InkRoot is a cross-platform note-taking app for personal knowledge capture. It works local-first and can also connect to the official server or a self-hosted Memos server for sync. The app supports Memos-compatible Markdown, images, tags, reminders, search, WebDAV backup, import/export, system sharing, widgets, and optional AI-assisted writing.
+InkRoot is a cross-platform note-taking app for personal knowledge capture. It works local-first and can also connect to a self-hosted Memos server for sync. The app supports Memos-compatible Markdown, images, tags, reminders, search, WebDAV backup, import/export, system sharing, widgets, and optional AI-assisted writing.
 
 [Latest release](https://github.com/yyyyymmmmm/InkRoot/releases/latest) · [Issues](https://github.com/yyyyymmmmm/InkRoot/issues) · [中文](README.md)
 
 ## Current Version
 
-`1.1.13`
+`1.1.14`
 
-This release fixes Android share crashes, blank shared content, self-hosted Memos 0.26/0.27/0.29 login or sync initialization failures, random-review widget placeholders, and iOS share-extension packaging issues. It also continues improving widgets, system sharing, Memos compatibility, and cross-platform builds.
+This release fixes the issue where signing in to a self-hosted Memos server would be automatically logged out after a while: sign-in now requests a never-expiring session, expired tokens trigger a silent re-login with saved credentials, and network failures no longer wipe local credentials. The app is also fully self-hosted now: dependencies on the former official server (cloud verification, cloud announcements, and in-app update checks) have been removed, and the sign-in/registration pages ask directly for your self-hosted server address.
 
 Highlights:
 
-- Android and iOS widgets now provide separate quick-note and random-review entry points.
-- Random-review widgets support real note selection, refresh settings, and random switching.
-- Android system sharing supports browsers, readers, selected text, galleries, file managers, and mixed attachments.
-- iOS adds a system share extension for sharing content from browsers, readers, Photos, and Files into InkRoot.
-- The Memos 0.21.0 to 0.29.1 compatibility path is improved for login, account loading, resources, and sync initialization.
-- Speech recognition now has a user-managed iFlytek configuration entry.
-- The knowledge graph has improved visuals, zooming, node selection, and large-note rendering performance.
-- Windows, macOS, and Linux now treat the font-size preference as whole-interface desktop scaling.
-- Markdown headings, blockquotes, links, underline, and related-note references render more consistently.
-- Tag path parsing, sidebar tag back navigation, and Chinese tag opening behavior are improved.
-- AI settings, model input, custom prompts, and quick-start copy are tightened.
-- Home feed rendering keeps user line breaks and spacing.
-- Expand controls are based on rendered visible content.
-- Image preview supports tap-to-dismiss, original image viewing, and multi-image browsing.
-- WebDAV backup supports image attachment options and improved folder creation, progress, and error handling.
-- Sync and refresh preserve note creation time to keep activity heatmaps stable.
-- Account and data deletion is now available in Settings, with a public deletion request page.
-- The iOS privacy manifest, permission declarations, and legal documents now match the current data flow.
-- The public website now has refreshed product pages, downloads, guide, FAQ, full changelog, and legal pages.
-- The project CLI covers verification, builds, and release tags.
+- Sign-in to self-hosted Memos servers now requests a never-expiring session, fixing automatic logouts after a while.
+- Expired tokens trigger a silent re-login with saved credentials first, keeping sessions stable.
+- Network failures such as a temporarily offline server no longer wipe local credentials; sync resumes once the network is back.
+- The sign-in and registration pages drop the "official server" option and ask directly for your self-hosted Memos server address, remembering the last one.
+- Cloud verification, cloud announcements, and in-app update checks are removed; the app no longer contacts the former official server.
+- The notification center now focuses on reminders, and the account-deletion page plus legal documents reflect the self-hosted model.
 - GitHub Actions covers Android, iOS, macOS, Windows, and Linux.
 
 ## Features
 
-- Local notes, official server sync, and self-hosted Memos sync.
+- Local notes and self-hosted Memos server sync.
 - Markdown rendering, todos, links, images, and tags.
 - Hierarchical tags such as `#work/projectA`.
 - Full-text search, pinning, reminders, and random review.
@@ -88,13 +74,13 @@ Platform builds require the matching host environment. iOS and macOS require mac
 The app version is managed in `pubspec.yaml`:
 
 ```yaml
-version: 1.1.13+10113
+version: 1.1.14+10114
 ```
 
 Release command:
 
 ```bash
-dart tool/inkroot.dart release v1.1.13
+dart tool/inkroot.dart release v1.1.14
 ```
 
 The command creates and pushes a version tag. GitHub Actions then verifies, builds, and publishes Android APK/AAB, iOS, macOS, Windows, and Linux assets.

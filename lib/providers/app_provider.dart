@@ -6,11 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http; // 添加http包
-import 'package:inkroot/config/app_config.dart' as Config;
 import 'package:inkroot/models/annotation_model.dart'; // ✅ 新增：批注模型
-import 'package:inkroot/models/announcement_model.dart';
 import 'package:inkroot/models/app_config_model.dart';
-import 'package:inkroot/models/cloud_verification_models.dart';
 import 'package:inkroot/models/load_more_state.dart';
 import 'package:inkroot/models/note_model.dart';
 import 'package:inkroot/models/reminder_notification_model.dart';
@@ -19,7 +16,6 @@ import 'package:inkroot/models/user_model.dart';
 import 'package:inkroot/models/webdav_config.dart';
 import 'package:inkroot/services/api_service.dart';
 import 'package:inkroot/services/api_service_factory.dart';
-import 'package:inkroot/services/cloud_verification_service.dart';
 import 'package:inkroot/services/database_service.dart';
 import 'package:inkroot/services/incremental_sync_service.dart';
 import 'package:inkroot/services/local_reference_service.dart';
@@ -44,7 +40,6 @@ import 'package:inkroot/utils/error_handler.dart';
 import 'package:inkroot/utils/logger.dart';
 import 'package:inkroot/utils/performance_tracker.dart';
 import 'package:inkroot/widgets/cached_avatar.dart';
-import 'package:inkroot/widgets/update_dialog.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -192,7 +187,6 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   Timer? _pendingDeleteCommitTimer;
 
   // 通知相关属性
-  final CloudVerificationService _cloudService = CloudVerificationService();
   final NotificationService _notificationService = NotificationService();
   // 🔥 暴露notificationService供main.dart使用
   NotificationService get notificationService => _notificationService;
@@ -205,15 +199,6 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   PreferencesService get preferencesService => _preferencesService;
   IncrementalSyncService? _incrementalSyncService;
   int _unreadAnnouncementsCount = 0;
-  final List<Announcement> _announcements = []; // 公告列表
-  // 🔄 已移除 _lastReadAnnouncementId，使用SharedPreferences中的列表管理已读状态
-
-  // 云验证相关
-  CloudAppConfigData? _cloudAppConfig;
-  CloudNoticeData? _cloudNotice;
-  DateTime? _lastCloudVerificationTime; // 🚀 上次加载云验证数据的时间
-  static const Duration _cloudVerificationCacheDuration =
-      Duration(minutes: 5); // 🚀 缓存5分钟
 
   // 获取排序后的笔记
   List<Note> _getSortedNotes() => sortedNotesCopy(_notes, _sortOrder);
@@ -288,9 +273,6 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   bool get mounted => _mounted;
 
   int get unreadAnnouncementsCount => _unreadAnnouncementsCount;
-  List<Announcement> get announcements => _announcements;
-  CloudAppConfigData? get cloudAppConfig => _cloudAppConfig;
-  CloudNoticeData? get cloudNotice => _cloudNotice;
 
   Future<List<Note>> searchNotes(String query) async {
     final results = await _databaseService.searchNotes(query);
@@ -603,15 +585,10 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         }
       });
 
-      // 🚀 延迟5秒加载云验证和公告（进一步降低启动负担）
+      // 🚀 延迟5秒后刷新提醒通知未读数（进一步降低启动负担）
       Future.delayed(const Duration(seconds: 5), () {
-        if (mounted && Config.AppConfig.enableCloudVerification) {
-          if (kDebugMode) {
-            debugPrint('AppProvider: 延迟加载通知和云验证');
-          }
-          refreshAnnouncements()
-              .then((_) => refreshUnreadAnnouncementsCount())
-              .catchError((e) {
+        if (mounted) {
+          refreshUnreadAnnouncementsCount().catchError((e) {
             if (kDebugMode) {
               debugPrint('AppProvider: 加载通知失败: $e');
             }
@@ -3269,14 +3246,6 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   @override
   Future<void> refreshUnreadAnnouncementsCount() async {
     try {
-      // 🚀 不立即刷新云验证数据，而是检查缓存
-      // 只有当缓存过期时才刷新（避免启动时网络请求）
-      if (_lastCloudVerificationTime == null ||
-          DateTime.now().difference(_lastCloudVerificationTime!) >
-              _cloudVerificationCacheDuration) {
-        await refreshCloudData();
-      }
-
       // 🔄 使用新的状态管理机制更新通知数量
       await _updateUnreadCount();
       notifyListeners();
@@ -3285,93 +3254,10 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
   }
 
-  // 启动时检查更新
-  Future<void> checkForUpdatesOnStartup() async {
-    try {
-      // 使用云验证数据检查更新
-      final hasUpdate = await hasCloudUpdate();
-
-      if (hasUpdate && _cloudAppConfig != null) {
-        final currentVersion = Config.AppConfig.appVersion;
-
-        // 将云验证数据转换为 VersionInfo 格式
-        _pendingVersionInfo = VersionInfo(
-          versionName: _cloudAppConfig!.version,
-          versionCode: _parseVersionCode(_cloudAppConfig!.version),
-          minRequiredVersion: _cloudAppConfig!.version,
-          downloadUrls: _cloudAppConfig!.appUpdateUrl.isNotEmpty
-              ? {'download': _cloudAppConfig!.appUpdateUrl}
-              : {},
-          releaseNotes: _cloudAppConfig!.formattedVersionInfo,
-          forceUpdate: _cloudAppConfig!.isForceUpdate,
-        );
-        _pendingCurrentVersion = currentVersion;
-      }
-    } on Object catch (e) {
-      debugPrint('启动时检查更新异常: $e');
-    }
-  }
-
-  // 解析版本号为版本代码
-  int _parseVersionCode(String version) {
-    final parts = version.split('.');
-    var code = 0;
-    for (var i = 0; i < parts.length && i < 3; i++) {
-      final part = int.tryParse(parts[i]) ?? 0;
-      code += part * (1000 * (3 - i));
-    }
-    return code;
-  }
-
-  // 版本信息暂存
-  VersionInfo? _pendingVersionInfo;
-  String? _pendingCurrentVersion;
-
-  // 显示更新对话框
-  void showUpdateDialogIfNeeded(BuildContext context) {
-    if (_pendingVersionInfo != null && _pendingCurrentVersion != null) {
-      final versionInfo = _pendingVersionInfo!;
-      final currentVersion = _pendingCurrentVersion!;
-
-      // 清除暂存的版本信息
-      _pendingVersionInfo = null;
-      _pendingCurrentVersion = null;
-
-      // 使用微任务确保对话框在下一帧显示
-      Future.microtask(() {
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: !versionInfo.forceUpdate,
-            builder: (context) => UpdateDialog(
-              versionInfo: versionInfo,
-              currentVersion: currentVersion,
-            ),
-          );
-        }
-      });
-    }
-  }
+  // 版本更新检查已随云验证服务一并移除：InkRoot 是纯自托管客户端，
+  // 更新通过 GitHub Releases / 应用商店分发，不在应用内做强更拦截。
 
   // 通知相关方法
-  Future<void> refreshAnnouncements() async {
-    await refreshCloudData();
-
-    // 🚀 大厂标准：从云验证公告数据创建 Announcement 对象（不拆分，保持完整）
-    _announcements.clear();
-    if (_cloudNotice?.appGg.isNotEmpty ?? false) {
-      // ✅ 保持应用公告为一条完整通知，不拆分
-      final announcement = Announcement(
-        id: 'cloud_notice_${DateTime.now().millisecondsSinceEpoch}',
-        title: '应用公告',
-        content: _cloudNotice!.appGg, // 完整内容，不拆分
-        type: 'info', // 使用 info 类型，以便在登录页面显示（update 类型专用于版本更新）
-        publishDate: DateTime.now(),
-      );
-      _announcements.add(announcement);
-    }
-    notifyListeners();
-  }
 
   Future<void> markAnnouncementAsRead(String id) async {
     try {
@@ -3399,20 +3285,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
 
   Future<void> markAllAnnouncementsAsRead() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final readNotifications = prefs.getStringList('read_notifications') ?? [];
-
-      // 🔄 新实现：标记当前所有通知为已读
-      final currentAnnouncementId = _cloudNotice?.appGg ?? '';
-      if (currentAnnouncementId.isNotEmpty &&
-          !readNotifications.contains(currentAnnouncementId)) {
-        readNotifications.add(currentAnnouncementId);
-        await prefs.setStringList('read_notifications', readNotifications);
-        if (kDebugMode) {
-          debugPrint('AppProvider: 所有通知已标记为已读');
-        }
-      }
-
+      await _reminderNotificationService.markAllAsRead();
       await _updateUnreadCount();
       notifyListeners();
     } on Object catch (e) {
@@ -3435,21 +3308,9 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
   }
 
-  // 🆕 新增：统一的未读数量更新方法（包括系统公告和提醒通知）
+  // 🆕 新增：统一的未读数量更新方法（提醒通知）
   Future<void> _updateUnreadCount() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final readNotifications = prefs.getStringList('read_notifications') ?? [];
-
-      final currentAnnouncementId = _cloudNotice?.appGg ?? '';
-
-      // 🔥 计算系统公告未读数量
-      var systemUnreadCount = 0;
-      if (currentAnnouncementId.isNotEmpty &&
-          !readNotifications.contains(currentAnnouncementId)) {
-        systemUnreadCount = 1;
-      }
-
       // 🔥 计算提醒通知未读数量
       var reminderUnreadCount = 0;
       try {
@@ -3461,8 +3322,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         }
       }
 
-      // 🔥 合并两种通知的未读数量
-      _unreadAnnouncementsCount = systemUnreadCount + reminderUnreadCount;
+      _unreadAnnouncementsCount = reminderUnreadCount;
     } on Object catch (e) {
       if (kDebugMode) {
         debugPrint('AppProvider: 更新未读数量失败: $e');
@@ -3472,139 +3332,6 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   }
 
   // 🗑️ 已移除旧的通知ID管理方法，使用新的列表式状态管理
-
-  // ===== 云验证相关方法 =====
-
-  /// 加载云验证数据（配置和公告）
-  Future<void> _loadCloudVerificationData() async {
-    try {
-      if (!Config.AppConfig.enableCloudVerification) {
-        _cloudAppConfig = null;
-        _cloudNotice = null;
-        _lastCloudVerificationTime = DateTime.now();
-        return;
-      }
-
-      // 🚀 缓存检查：如果5分钟内已加载过，直接跳过
-      if (_lastCloudVerificationTime != null) {
-        final duration = DateTime.now().difference(_lastCloudVerificationTime!);
-        if (duration < _cloudVerificationCacheDuration) {
-          return;
-        }
-      }
-
-      if (kDebugMode) {
-        debugPrint('AppProvider: 开始加载云验证数据');
-      }
-
-      // 并行加载配置和公告
-      final futures = await Future.wait([
-        _cloudService.fetchAppConfig(),
-        _cloudService.fetchAppNotice(),
-      ]);
-
-      final configResponse = futures[0] as CloudAppConfigResponse?;
-      final noticeResponse = futures[1] as CloudNoticeResponse?;
-
-      // 处理配置响应
-      if (configResponse != null && configResponse.isSuccess) {
-        _cloudAppConfig = configResponse.msg;
-
-        // 检查是否需要更新
-        await _checkCloudUpdate();
-      } else {
-        if (kDebugMode) {
-          debugPrint('AppProvider: 云配置加载失败');
-        }
-      }
-
-      // 处理公告响应
-      if (noticeResponse != null && noticeResponse.isSuccess) {
-        _cloudNotice = noticeResponse.msg;
-        // 云公告加载成功
-      } else {
-        // 云公告加载失败
-      }
-
-      // 🚀 更新缓存时间
-      _lastCloudVerificationTime = DateTime.now();
-    } on Object {
-      // 加载云验证数据异常
-    }
-  }
-
-  /// 检查云端更新
-  ///
-  /// iOS: 通过iTunes API检查App Store版本（符合Apple规范）
-  /// Android: 通过自有服务器检查版本
-  Future<void> _checkCloudUpdate() async {
-    try {
-      // ⚠️ iOS平台使用iTunes API，不使用自有服务器
-      if (Platform.isIOS) {
-        // iOS通过App Store检查更新（在需要时调用）
-        // 这里不自动检查，避免启动时频繁访问App Store API
-        return;
-      }
-
-      // Android平台继续使用原有逻辑
-      if (_cloudAppConfig == null) {
-        return;
-      }
-
-      // 获取当前应用版本
-      final currentVersion = Config.AppConfig.appVersion;
-
-      // 比较版本
-      final hasUpdate = _cloudService.isVersionNewer(
-        currentVersion,
-        _cloudAppConfig!.version,
-      );
-
-      if (hasUpdate || _cloudAppConfig!.isForceUpdate) {
-        debugPrint(
-          'AppProvider: 发现云端更新 - 当前版本: $currentVersion, 最新版本: ${_cloudAppConfig!.version}',
-        );
-        debugPrint('AppProvider: 强制更新: ${_cloudAppConfig!.isForceUpdate}');
-      }
-    } on Object catch (e) {
-      debugPrint('AppProvider: 检查云端更新异常: $e');
-    }
-  }
-
-  /// 手动刷新云验证数据
-  Future<void> refreshCloudData() async {
-    await _loadCloudVerificationData();
-    notifyListeners();
-  }
-
-  /// 获取云端公告内容列表
-  List<String> getCloudNotices() => _cloudNotice?.formattedNotices ?? [];
-
-  /// 获取云端版本信息列表
-  List<String> getCloudVersionInfo() =>
-      _cloudAppConfig?.formattedVersionInfo ?? [];
-
-  /// 是否有云端更新
-  Future<bool> hasCloudUpdate() async {
-    try {
-      if (_cloudAppConfig == null) {
-        return false;
-      }
-
-      final currentVersion = Config.AppConfig.appVersion;
-
-      return _cloudService.isVersionNewer(
-        currentVersion,
-        _cloudAppConfig!.version,
-      );
-    } on Object catch (e) {
-      debugPrint('AppProvider: 检查是否有云端更新异常: $e');
-      return false;
-    }
-  }
-
-  /// 是否强制更新
-  bool isForceCloudUpdate() => _cloudAppConfig?.isForceUpdate ?? false;
 
   // 在销毁时清理
   @override
@@ -3741,8 +3468,26 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
 
         notifyListeners();
       } else {
+        final errorMsg = loginResult.$2 ?? '';
+
+        // 网络故障（服务器暂时离线/DNS/超时）：保留凭据与自动登录，
+        // 保持本地模式等待网络恢复，由后续手动/自动同步重试。
+        if (sync_status.isNetworkFailureError(errorMsg)) {
+          debugPrint('AppProvider: 自动登录因网络故障失败，保留登录信息');
+          _setSyncMessage('暂时无法连接服务器，已切换离线模式');
+          notifyListeners();
+          return;
+        }
+
+        // Token 确认失效：先用保存的账号密码静默重登（成功则恢复在线模式）
+        if (await trySilentRelogin()) {
+          debugPrint('AppProvider: 静默重登成功，恢复在线模式');
+          notifyListeners();
+          return;
+        }
+
         if (kDebugMode) {
-          debugPrint('AppProvider: 自动登录失败: ${loginResult.$2}，清除保存的登录信息');
+          debugPrint('AppProvider: 自动登录失败: $errorMsg，清除保存的登录信息');
         }
 
         // Token无效，清除保存的登录信息
@@ -3757,7 +3502,19 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         debugPrint('AppProvider: 自动登录过程中发生异常: $e');
       }
 
-      // 发生异常时清除保存的登录信息
+      // 网络故障：保留登录信息等待下次恢复
+      if (sync_status.isNetworkFailureError(e)) {
+        _setSyncMessage('暂时无法连接服务器，已切换离线模式');
+        notifyListeners();
+        return;
+      }
+
+      if (await trySilentRelogin()) {
+        notifyListeners();
+        return;
+      }
+
+      // 确认无法恢复登录，清除保存的登录信息
       try {
         await _preferencesService.clearLoginInfo();
         _user = null;
@@ -3911,6 +3668,66 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       }
     } on Object catch (_) {
       // Rebuilding references is maintenance and should not interrupt the app.
+    }
+  }
+
+  // 🔄 静默重登：使用安全存储中保存的账号密码重新登录
+  DateTime? _lastSilentReloginAt;
+
+  /// 使用保存的账号密码静默重新登录（勾选“记住登录”时凭据已存入安全存储）。
+  ///
+  /// 适用场景：
+  ///   • 旧版本签发的短期会话过期后自动续期（存量用户升级后的兜底）
+  ///   • 启动自动登录 token 失效但网络正常
+  ///
+  /// 返回 true 表示重登成功，API/资源/增量同步服务已刷新并恢复自动同步。
+  /// 带 5 分钟冷却，防止与定时同步形成循环。
+  Future<bool> trySilentRelogin() async {
+    final lastAttempt = _lastSilentReloginAt;
+    final now = DateTime.now();
+    if (lastAttempt != null &&
+        now.difference(lastAttempt) < const Duration(minutes: 5)) {
+      return false;
+    }
+    _lastSilentReloginAt = now;
+
+    try {
+      final serverUrl = await _preferencesService.getSavedServer();
+      final username = await _preferencesService.getSavedUsername();
+      final password = await _preferencesService.getSavedPassword();
+      if (serverUrl == null ||
+          username == null ||
+          password == null ||
+          password.isEmpty) {
+        debugPrint('AppProvider: 没有保存的账号密码，无法静默重登');
+        return false;
+      }
+
+      debugPrint('AppProvider: 使用保存的账号密码静默重登');
+      final result = await loginWithPassword(
+        serverUrl,
+        username,
+        password,
+        remember: true,
+      );
+
+      if (!result.$1) {
+        debugPrint('AppProvider: 静默重登失败: ${result.$2}');
+        return false;
+      }
+
+      // 补齐 loginWithPassword 不会初始化的增量同步服务
+      _incrementalSyncService = IncrementalSyncService(
+        _databaseService,
+        _memosApiService,
+      );
+      startAutoSync();
+      notifyListeners();
+      debugPrint('AppProvider: 静默重登成功');
+      return true;
+    } on Object catch (e) {
+      debugPrint('AppProvider: 静默重登异常: $e');
+      return false;
     }
   }
 

@@ -348,10 +348,11 @@ void main() {
                 break;
               case 'flat':
                 expect(body, containsPair('username', 'alice'));
-                expect(body, containsPair('neverExpire', false));
+                expect(body, containsPair('neverExpire', true));
                 break;
               case 'wrapped':
                 expect(body['passwordCredentials'], isA<Map>());
+                expect(body, containsPair('neverExpire', true));
                 break;
             }
 
@@ -477,6 +478,51 @@ void main() {
         ),
         throwsA(isA<Exception>()),
       );
+    });
+
+    // 回归：登录必须签发永不过期的会话，否则自建 Memos 用户会在
+    // 会话过期（默认约 7 天）后被自动登出。
+    test('API-13b v0.22+ 登录请求体必须携带 neverExpire: true', () async {
+      for (final version in ['v0.22.0', 'v0.25.0', 'v0.26.0', 'v0.29.1']) {
+        await MemosApiServiceFixed.invalidateVersionCache(baseUrl);
+        Map<String, dynamic>? capturedBody;
+        final mock = MockClient((req) async {
+          if (req.url.path.endsWith('/api/v1/workspace/profile')) {
+            return http.Response(jsonEncode({'version': version}), 200);
+          }
+          if (req.url.path.endsWith('/api/v1/auth/signin')) {
+            capturedBody = jsonDecode(req.body) as Map<String, dynamic>;
+            final minor = version.split('.')[1];
+            if (int.parse(minor) >= 26) {
+              return http.Response(
+                jsonEncode({'accessToken': 'tok-$minor'}),
+                200,
+              );
+            }
+            return http.Response(
+              '{}',
+              200,
+              headers: {
+                'set-cookie': 'memos.access-token=tok-$minor; Path=/',
+              },
+            );
+          }
+          return http.Response('{}', 404);
+        });
+
+        final svc = MemosApiServiceFixed(baseUrl: baseUrl);
+        final token = await http.runWithClient(
+          () => svc.createAccessToken('alice', 'pass123'),
+          () => mock,
+        );
+
+        expect(token, startsWith('tok-'));
+        expect(
+          capturedBody,
+          containsPair('neverExpire', true),
+          reason: '$version 登录请求体必须携带 neverExpire: true',
+        );
+      }
     });
   });
 

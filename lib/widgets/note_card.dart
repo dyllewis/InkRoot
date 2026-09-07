@@ -667,11 +667,21 @@ class _NoteCardState extends State<NoteCard>
   // 🔥 在缓存中查找图片（通过路径片段匹配）
   Future<File?> _findImageInCache(String imagePath) async {
     try {
-      // 尝试多个可能的服务器URL前缀
-      final possibleUrls = [
-        'https://memos.didichou.site$imagePath',
-        'http://localhost$imagePath',
-      ];
+      // 从当前配置构建可能的服务器URL前缀（兼容任意自建服务器）
+      final possibleUrls = <String>[];
+      try {
+        final appProvider = Provider.of<AppProvider>(context, listen: false);
+        final resourceService = appProvider.resourceService;
+        if (resourceService != null) {
+          possibleUrls.add(resourceService.buildImageUrl(imagePath));
+        }
+        final serverUrl = appProvider.appConfig.lastServerUrl ??
+            appProvider.appConfig.memosApiUrl;
+        if (serverUrl != null && serverUrl.isNotEmpty) {
+          possibleUrls.add('$serverUrl$imagePath');
+        }
+      } on Object catch (_) {}
+      possibleUrls.add('http://localhost$imagePath');
 
       for (final url in possibleUrls) {
         final fileInfo =

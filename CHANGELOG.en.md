@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.14] - 2026-09-07
+
+### Fixed
+- Fixed the issue where signing in to a self-hosted Memos server was automatically logged out after a while: sign-in now requests a never-expiring session (`neverExpire: true`, compatible with Memos 0.22–0.29)
+- Expired tokens now trigger a silent re-login with saved credentials first (with a 5-minute cooldown) before requiring manual sign-in
+- Network failures such as a temporarily offline server, DNS errors, or timeouts no longer wipe local credentials; sync resumes automatically once the network recovers
+- "API service initialization failed" no longer forces a logout; the app tries to recover or falls back to local mode
+
+### Changed
+- The app is now fully self-hosted: all dependencies on the former official servers (memos.didichou.site / api.didichou.site) have been removed
+- Removed cloud verification, cloud announcements (login marquee, notification center cloud notices), and in-app update checks / force-update dialogs
+- The sign-in and registration pages drop the "Official server (recommended)" option and ask directly for your self-hosted Memos server address, remembering the last input
+- The notification center now focuses on local reminders; the account-deletion page, privacy policy, and user agreement now reflect the self-hosted model (legal document version updated to 2026-09-07)
+- Removed cloud verification key injection from the maintenance CLI and packaging scripts; offline image-cache lookup no longer hardcodes the official domain
+
 ## [1.1.13] - 2026-06-22
 
 ### Fixed

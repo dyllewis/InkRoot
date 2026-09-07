@@ -26,8 +26,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
   String get _localClearTitle =>
       _isZh ? '删除本机数据' : 'Delete data on this device';
 
-  String get _officialDeletionTitle =>
-      _isZh ? '删除官方服务器账号' : 'Delete official server account';
+  String get _serverDeletionTitle =>
+      _isZh ? '删除服务器账号' : 'Server account deletion';
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +36,6 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
     final user = appProvider.user;
     final serverUrl =
         user?.serverUrl ?? appProvider.appConfig.memosApiUrl ?? '';
-    final isOfficialServer = _isOfficialServer(serverUrl);
 
     return Scaffold(
       appBar: AppBar(
@@ -50,8 +49,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
             icon: Icons.verified_user_outlined,
             title: _isZh ? '删除范围说明' : 'Deletion scope',
             body: _isZh
-                ? '你可以在这里删除本机笔记、图片缓存、登录凭证和应用设置；如果你使用官方服务器账号，也可以发起账号及关联服务器数据删除申请。自部署 Memos、WebDAV、AI 服务中的数据由对应服务保存，需要在相应服务中删除。'
-                : 'You can delete local notes, image cache, login credentials, and app settings here. If you use the official server account, you can also initiate deletion of the account and associated server-side data. Data stored in self-hosted Memos, WebDAV, or AI services must be deleted in those services.',
+                ? '你可以在这里删除本机笔记、图片缓存、登录凭证和应用设置。InkRoot 不运营任何服务器，你的账号和远端数据保存在你自己部署的 Memos、WebDAV 等服务中，需要在相应服务里删除。'
+                : 'You can delete local notes, image cache, login credentials, and app settings here. InkRoot does not operate any server; your account and remote data live in the Memos, WebDAV, or other services you deploy, and must be deleted in those services.',
           ),
           const SizedBox(height: 12),
           _SectionCard(
@@ -68,12 +67,6 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                 value: serverUrl.isEmpty
                     ? (_isZh ? '未连接' : 'Not connected')
                     : serverUrl,
-              ),
-              _StatusRow(
-                label: _isZh ? '服务器类型' : 'Server type',
-                value: isOfficialServer
-                    ? (_isZh ? '官方服务器' : 'Official server')
-                    : (_isZh ? '本地或自部署服务' : 'Local or self-hosted'),
               ),
             ],
           ),
@@ -111,16 +104,12 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
           ),
           const SizedBox(height: 12),
           _SectionCard(
-            title: _officialDeletionTitle,
+            title: _serverDeletionTitle,
             children: [
               Text(
-                isOfficialServer
-                    ? (_isZh
-                        ? '官方服务器账号删除会进入网页表单完成身份确认和删除申请。申请提交后，我们会按隐私政策处理账号资料、服务端笔记、附件和相关日志。'
-                        : 'Official server account deletion opens a web form for identity confirmation and deletion request submission. After submission, account profile, server-side notes, attachments, and related logs will be processed according to the privacy policy.')
-                    : (_isZh
-                        ? '当前不是官方服务器。InkRoot 无法直接删除你自部署服务中的账号或数据，请在你的 Memos、WebDAV 或其他服务管理后台处理。你仍可打开说明页查看官方服务器删除流程。'
-                        : 'The current server is not the official server. InkRoot cannot directly delete accounts or data in your self-hosted services. Please manage deletion in your Memos, WebDAV, or other service admin panels. You can still open the information page for the official deletion process.'),
+                _isZh
+                    ? 'InkRoot 连接的是你自己部署的 Memos 服务端，账号数据由该服务器保存。\n\n请登录 Memos 网页端，在「设置」中删除账号；如果实例由他人管理，请联系实例管理员在后台删除。删除本机数据不会影响服务器端内容。'
+                    : 'InkRoot connects to the Memos server you deploy yourself, and your account data is stored on that server.\n\nSign in to the Memos web UI and delete your account from Settings, or ask your instance administrator to remove it. Deleting local data does not affect server-side content.',
                 style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
               ),
               const SizedBox(height: 16),
@@ -133,7 +122,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                       )
                     : const Icon(Icons.open_in_new_rounded),
                 label: Text(
-                  _isZh ? '打开删除申请页面' : 'Open deletion request page',
+                  _isZh ? '打开删除说明页面' : 'Open deletion info page',
                 ),
               ),
               const SizedBox(height: 8),
@@ -141,7 +130,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
                 onPressed: _copyDeletionRequestTemplate,
                 icon: const Icon(Icons.copy_rounded),
                 label: Text(
-                  _isZh ? '复制删除申请信息' : 'Copy deletion request details',
+                  _isZh ? '复制账号信息' : 'Copy account details',
                 ),
               ),
             ],
@@ -157,19 +146,6 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
         ],
       ),
     );
-  }
-
-  bool _isOfficialServer(String serverUrl) {
-    if (serverUrl.trim().isEmpty) {
-      return false;
-    }
-    try {
-      final configured = Uri.parse(serverUrl);
-      final official = Uri.parse(AppConfig.officialMemosServer);
-      return configured.host.toLowerCase() == official.host.toLowerCase();
-    } on Object {
-      return false;
-    }
   }
 
   Future<void> _confirmAndClearLocalData() async {
@@ -284,7 +260,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
         user?.serverUrl ?? appProvider.appConfig.memosApiUrl ?? '';
     final text = _isZh
         ? '''
-账号与数据删除申请
+账号与数据删除
 
 账号：${user?.username ?? '未登录'}
 邮箱：${user?.email ?? '未设置'}
@@ -292,10 +268,10 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
 应用版本：${AppConfig.getFullVersionInfo()}
 平台：${defaultTargetPlatform.name}
 
-我申请删除官方服务器账号及与该账号关联的数据。
+我申请删除该服务器账号及与该账号关联的数据。
 '''
         : '''
-Account and data deletion request
+Account and data deletion
 
 Account: ${user?.username ?? 'Not signed in'}
 Email: ${user?.email ?? 'Not set'}
@@ -303,7 +279,7 @@ Server: ${serverUrl.isEmpty ? 'Not connected' : serverUrl}
 App version: ${AppConfig.getFullVersionInfo()}
 Platform: ${defaultTargetPlatform.name}
 
-I request deletion of my official server account and associated data.
+I request deletion of this server account and associated data.
 ''';
 
     await Clipboard.setData(ClipboardData(text: text.trim()));

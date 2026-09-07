@@ -93,13 +93,10 @@ class _HomeScreenState extends State<HomeScreen>
     // 🚀 添加滚动监听，实现分页加载
     _scrollController.addListener(_onScroll);
 
-    // 在页面加载完成后异步检查更新和通知
+    // 在页面加载完成后异步刷新通知
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 🚀 最优延迟策略：与后台云验证协调（启动后8-10秒）
-      // 此时后台已开始云验证，直接使用缓存数据
       Future.delayed(const Duration(seconds: 10), () {
         if (mounted) {
-          _checkForUpdates();
           _refreshNotifications();
         }
       });
@@ -332,23 +329,6 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
     }
-  }
-
-  // 异步检查更新
-  Future<void> _checkForUpdates() async {
-    if (!mounted) {
-      return;
-    }
-
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
-    // 异步检查更新，不阻塞UI
-    unawaited(
-      appProvider.checkForUpdatesOnStartup().then((_) {
-        if (mounted) {
-          appProvider.showUpdateDialogIfNeeded(context);
-        }
-      }),
-    );
   }
 
   // 刷新通知数据

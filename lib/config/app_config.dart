@@ -24,15 +24,6 @@ class AppConfig {
   /// 构建号（单一真源：来自打包元数据 / pubspec.yaml）
   static int get buildNumber => int.tryParse(AppInfoService.buildNumber) ?? 0;
 
-  /// 应用ID
-  static const String appId = '10002';
-
-  /// 应用密钥
-  static const String appKey = String.fromEnvironment(
-    'CLOUD_VERIFY_APP_KEY',
-    defaultValue: 'RLu4EGglybXSgRzK',
-  );
-
   /// 应用包名
   static const String packageName = AppIdentity.packageName;
 
@@ -58,21 +49,9 @@ class AppConfig {
   static bool get isReleaseBuild => kReleaseMode;
 
   // ==================== 服务器配置 ====================
-
-  /// 官方Memos服务器地址
-  static const String officialMemosServer = 'https://memos.didichou.site';
-
-  /// API基础地址
-  static const String apiBaseUrl = 'https://api.didichou.site';
-
-  /// 云验证API地址
-  static const String cloudVerificationUrl = '$apiBaseUrl/api.php';
-
-  /// 应用更新检查地址
-  static const String appUpdateUrl = '$apiBaseUrl/admin/applist.php';
-
-  /// 云公告URL
-  static String getCloudNoticeUrl() => '$apiBaseUrl/notice.php';
+  // InkRoot 是纯自托管客户端：所有同步、登录均直接连接用户自建的
+  // Memos 服务端（v0.21–v0.29），服务器地址由用户在登录/注册页填写，
+  // 不再内置任何默认服务器。
 
   // ==================== 🚀 Sentry监控配置 ====================
 
@@ -438,9 +417,6 @@ class AppConfig {
   /// 官方网站
   static const String officialWebsite = 'https://inkroot.cn/';
 
-  /// 用户反馈地址
-  static const String feedbackUrl = '$apiBaseUrl/feedback';
-
   /// 帮助文档地址
   static const String helpDocUrl = '$officialWebsite/help';
 
@@ -450,12 +426,12 @@ class AppConfig {
   // ==================== 法律文档 ====================
 
   /// 当前法律文档版本。修改协议或隐私政策时更新该值，用于触发重新确认。
-  static const String legalDocumentVersion = '2026-06-15';
+  static const String legalDocumentVersion = '2026-09-07';
 
   /// 法律文档固定更新日期，避免页面每天显示伪更新。
   static const int legalUpdatedYear = 2026;
-  static const int legalUpdatedMonth = 6;
-  static const int legalUpdatedDay = 15;
+  static const int legalUpdatedMonth = 9;
+  static const int legalUpdatedDay = 7;
 
   /// 隐私政策地址
   static const String privacyPolicyUrl = '${officialWebsite}privacy.html';
@@ -508,16 +484,6 @@ class AppConfig {
   static const String googlePlayPackage = packageName;
 
   // ==================== 功能开关 ====================
-
-  /// 是否启用云验证
-  /// 公告/配置接口依赖构建时注入的应用 ID 和密钥。
-  /// iOS 仍不使用自有更新检查，但可以读取后端公告。
-  static bool get enableCloudVerification =>
-      appId.isNotEmpty && appKey.isNotEmpty;
-
-  /// 是否启用自动更新检查
-  /// ⚠️ iOS平台禁用（Apple要求更新必须通过App Store）
-  static bool get enableAutoUpdate => Platform.isAndroid;
 
   /// 是否启用崩溃报告（Sentry）
   /// ⚠️ iOS平台禁用，Android平台可用

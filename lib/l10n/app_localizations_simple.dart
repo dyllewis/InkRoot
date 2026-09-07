@@ -475,7 +475,7 @@ class AppLocalizationsSimple {
       _t('onboardingDesc2', fallback: '支持层级标签、搜索和回顾，记录多了也能找回来');
   String get onboardingTitle3 => _t('onboardingTitle3', fallback: '随时随地同步');
   String get onboardingDesc3 =>
-      _t('onboardingDesc3', fallback: '可连接官方服务器或自部署 Memos，多端同步由你选择');
+      _t('onboardingDesc3', fallback: '可连接自己部署的 Memos 服务端，多端同步由你选择');
   String get onboardingTitle4 => _t('onboardingTitle4', fallback: '多平台支持');
   String get onboardingDesc4 =>
       _t('onboardingDesc4', fallback: '支持手机、平板、电脑多端协作\n让你的创作思路在任何设备上延续');
@@ -836,7 +836,7 @@ class AppLocalizationsSimple {
   String get appIntroduction => _t(
         'appIntroduction',
         fallback:
-            'InkRoot 是一款面向个人记录和知识整理的笔记应用。你可以本地使用，也可以连接官方服务器或自部署 Memos 服务同步笔记。',
+            'InkRoot 是一款面向个人记录和知识整理的笔记应用。你可以本地使用，也可以连接自己部署的 Memos 服务同步笔记。',
       );
   String get appTechDescription => _t(
         'appTechDescription',
@@ -1055,9 +1055,6 @@ class AppLocalizationsSimple {
   String get passwordMinLength =>
       _t('passwordMinLength', fallback: '密码至少需要6个字符');
   String get server => _t('server', fallback: '服务器');
-  String get customServer => _t('customServer', fallback: '自定义服务器');
-  String get officialServer => _t('officialServer', fallback: '官方服务器');
-  String get recommended => _t('recommended', fallback: '推荐使用');
   String get serverAddressMustStartWithHttp => _t(
         'serverAddressMustStartWithHttp',
         fallback: '服务器地址必须以 http:// 或 https:// 开头',
@@ -1072,8 +1069,6 @@ class AppLocalizationsSimple {
       _t('versionCompatibility', fallback: '版本兼容性说明');
   String get contactSupport =>
       _t('contactSupport', fallback: '如有疑问，请查看官方文档或联系技术支持');
-  String get customServerWarning =>
-      _t('customServerWarning', fallback: '使用自定义服务器可能会影响使用体验');
   String get answerYourQuestions =>
       _t('answerYourQuestions', fallback: '为您解答使用中的疑问');
   String get howToLogin => _t('howToLogin', fallback: '如何登录账号？');
@@ -1084,7 +1079,7 @@ class AppLocalizationsSimple {
   String get whatIsServer => _t('whatIsServer', fallback: '什么是服务器？');
   String get whatIsServerAnswer => _t(
         'whatIsServerAnswer',
-        fallback: '服务器用于存储和同步您的笔记数据。推荐使用官方服务器，也可以使用自己部署的 Memos 服务器。',
+        fallback: '服务器用于存储和同步您的笔记数据。InkRoot 连接的是您自己部署的 Memos 服务器，数据由您自己掌控。',
       );
   String get howToSyncData => _t('howToSyncData', fallback: '如何同步数据？');
   String get howToSyncDataAnswer => _t(
@@ -1143,7 +1138,7 @@ class AppLocalizationsSimple {
       _t('whatIfForgotPassword', fallback: '忘记密码怎么办？');
   String get whatIfForgotPasswordAnswer => _t(
         'whatIfForgotPasswordAnswer',
-        fallback: '如使用官方服务器，请联系管理员重置密码。如使用自定义服务器，请联系您的服务器管理员。',
+        fallback: '请联系您的 Memos 服务器管理员（自建服务器通常就是您自己），由管理员在后台重置密码。',
       );
   String get anyOtherQuestions => _t('anyOtherQuestions', fallback: '还有其他问题？');
   String get viewHelpCenter => _t('viewHelpCenter', fallback: '查看帮助中心');

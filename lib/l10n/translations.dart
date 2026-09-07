@@ -284,9 +284,9 @@ class Translations {
     },
     'onboardingTitle3': {'zh': '随时随地同步', 'en': 'Sync Anytime, Anywhere'},
     'onboardingDesc3': {
-      'zh': '可连接官方服务器或自部署 Memos，多端同步由你选择',
+      'zh': '可连接自己部署的 Memos 服务端，多端同步由你选择',
       'en':
-          'Connect to the official server or a self-hosted Memos service. Sync is your choice.',
+          'Connect to the Memos server you deploy yourself. Sync is your choice.',
     },
     'onboardingTitle4': {'zh': '多平台支持', 'en': 'Multi-Platform Support'},
     'onboardingDesc4': {
@@ -787,9 +787,9 @@ class Translations {
           'Settle patiently, then speak with force.\nEvery note you take becomes a root for what comes next.',
     },
     'appIntroduction': {
-      'zh': 'InkRoot 是一款面向个人记录和知识整理的笔记应用。你可以本地使用，也可以连接官方服务器或自部署 Memos 服务同步笔记。',
+      'zh': 'InkRoot 是一款面向个人记录和知识整理的笔记应用。你可以本地使用，也可以连接自己部署的 Memos 服务同步笔记。',
       'en':
-          'InkRoot is a note app for personal capture and knowledge organization. You can use it locally, connect to the official server, or sync with a self-hosted Memos service.',
+          'InkRoot is a note app for personal capture and knowledge organization. You can use it locally or sync with the Memos service you deploy yourself.',
     },
     'appTechDescription': {
       'zh': '这些是当前版本已经开放的主要能力。不同 Memos 服务器版本的接口能力不同，应用会按服务器版本自动适配并尽量降级处理。',
@@ -1149,9 +1149,6 @@ class Translations {
       'en': 'Password must be at least 6 characters',
     },
     'server': {'zh': '服务器', 'en': 'Server'},
-    'customServer': {'zh': '自定义服务器', 'en': 'Custom Server'},
-    'officialServer': {'zh': '官方服务器', 'en': 'Official Server'},
-    'recommended': {'zh': '推荐使用', 'en': 'Recommended'},
     'serverAddressMustStartWithHttp': {
       'zh': '服务器地址必须以 http:// 或 https:// 开头',
       'en': 'Server address must start with http:// or https://',
@@ -1174,10 +1171,6 @@ class Translations {
       'en':
           'For any questions, please check the official documentation or contact support',
     },
-    'customServerWarning': {
-      'zh': '使用自定义服务器可能会影响使用体验',
-      'en': 'Using a custom server may affect user experience',
-    },
     'serverAddress': {'zh': '服务器地址', 'en': 'Server Address'},
     'faq': {'zh': '常见问题', 'en': 'FAQ'},
     'answerYourQuestions': {'zh': '为您解答使用中的疑问', 'en': 'Answer your questions'},
@@ -1189,9 +1182,9 @@ class Translations {
     },
     'whatIsServer': {'zh': '什么是服务器？', 'en': 'What is a server?'},
     'whatIsServerAnswer': {
-      'zh': '服务器用于存储和同步您的笔记数据。推荐使用官方服务器，也可以使用自己部署的 Memos 服务器。',
+      'zh': '服务器用于存储和同步您的笔记数据。InkRoot 连接的是您自己部署的 Memos 服务器，数据由您自己掌控。',
       'en':
-          'The server is used to store and sync your notes data. Official server is recommended, but you can also use your own deployed Memos server.',
+          'The server stores and syncs your notes. InkRoot connects to the Memos server you deploy yourself, so your data stays under your control.',
     },
     'howToSyncData': {'zh': '如何同步数据？', 'en': 'How to sync data?'},
     'howToSyncDataAnswer': {
@@ -1284,9 +1277,9 @@ class Translations {
       'en': 'What if I forget my password?',
     },
     'whatIfForgotPasswordAnswer': {
-      'zh': '如使用官方服务器，请联系管理员重置密码。如使用自定义服务器，请联系您的服务器管理员。',
+      'zh': '请联系您的 Memos 服务器管理员（自建服务器通常就是您自己），由管理员在后台重置密码。',
       'en':
-          'If using the official server, please contact the administrator to reset your password. If using a custom server, please contact your server administrator.',
+          'Please contact your Memos server administrator (for self-hosted servers, that is usually you) to reset the password from the admin panel.',
     },
     'anyOtherQuestions': {'zh': '还有其他问题？', 'en': 'Any other questions?'},
     'viewHelpCenter': {'zh': '查看帮助中心', 'en': 'View Help Center'},

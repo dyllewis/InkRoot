@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:inkroot/config/app_config.dart';
 import 'package:inkroot/l10n/app_localizations_simple.dart';
 import 'package:inkroot/providers/app_provider.dart';
 import 'package:inkroot/themes/app_theme.dart';
@@ -29,7 +28,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   bool _agreedToTerms = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  bool _useCustomServer = false;
 
   late AnimationController _heroController;
   late AnimationController _formController;
@@ -106,61 +104,24 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _loadSavedServerInfo() async {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
 
-    // 🎯 大厂标准：加载服务器选择偏好（跨页面共享）
+    // 记住上次使用的自建服务器地址（跨登录/注册页共享）
     final prefsService = appProvider.preferencesService;
-    final useCustomServer = await prefsService.getUseCustomServer();
-    final customServerUrl = await prefsService.getCustomServerUrl();
+    final lastServerUrl = await prefsService.getCustomServerUrl();
 
-    debugPrint('RegisterScreen: 使用自定义服务器: $useCustomServer');
-    debugPrint('RegisterScreen: 自定义服务器地址: $customServerUrl');
+    debugPrint('RegisterScreen: 上次使用的服务器地址: $lastServerUrl');
 
     setState(() {
-      _useCustomServer = useCustomServer;
-      _serverController.text = useCustomServer && customServerUrl != null
-          ? customServerUrl
-          : AppConfig.officialMemosServer;
+      if (lastServerUrl != null && lastServerUrl.isNotEmpty) {
+        _serverController.text = lastServerUrl;
+      }
     });
   }
 
-  // 🎯 大厂标准：处理服务器选择变化（实时同步到SharedPreferences）
-  Future<void> _onServerTypeChanged(bool useCustom) async {
+  // 🎯 记住用户输入的自建服务器地址（登录/注册页共享）
+  Future<void> _onServerUrlChanged(String url) async {
     final appProvider = Provider.of<AppProvider>(context, listen: false);
     final prefsService = appProvider.preferencesService;
-
-    if (useCustom) {
-      // 切换到自定义：显示之前保存的自定义地址，如果没有则清空
-      final savedCustomUrl = await prefsService.getCustomServerUrl();
-      setState(() {
-        _useCustomServer = true;
-        _serverController.text = (savedCustomUrl != null &&
-                savedCustomUrl != AppConfig.officialMemosServer)
-            ? savedCustomUrl
-            : ''; // 清空输入框，让用户输入
-      });
-    } else {
-      // 切换到官方：显示官方地址
-      setState(() {
-        _useCustomServer = false;
-        _serverController.text = AppConfig.officialMemosServer;
-      });
-      await prefsService.saveCustomServerUrl(AppConfig.officialMemosServer);
-    }
-
-    // 保存选择到SharedPreferences，实现跨页面同步
-    await prefsService.saveUseCustomServer(useCustom);
-
-    debugPrint('RegisterScreen: 服务器选择已更改: ${useCustom ? "自定义" : "官方"}');
-  }
-
-  // 🎯 大厂标准：处理自定义服务器地址变化
-  Future<void> _onCustomServerUrlChanged(String url) async {
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
-    final prefsService = appProvider.preferencesService;
-
-    // 保存到SharedPreferences，实现跨页面同步
     await prefsService.saveCustomServerUrl(url);
-
-    debugPrint('RegisterScreen: 自定义服务器地址已更新: $url');
   }
 
   void _openPrivacyPolicy() {
@@ -189,9 +150,7 @@ class _RegisterScreenState extends State<RegisterScreen>
 
     try {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
-      final serverUrl = _useCustomServer
-          ? _serverController.text.trim()
-          : AppConfig.officialMemosServer;
+      final serverUrl = _serverController.text.trim();
       final username = _usernameController.text.trim();
       final password = _passwordController.text.trim();
 
@@ -1310,217 +1269,96 @@ class _RegisterScreenState extends State<RegisterScreen>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 服务器类型选择标题
-          Text(
-            AppLocalizationsSimple.of(context)?.server ?? '服务器',
+          // 服务器地址输入（InkRoot 为纯自托管客户端）
+          TextFormField(
+            controller: _serverController,
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+              fontSize: 16,
               color: textPrimary,
-              height: 1.5,
+              fontWeight: FontWeight.w500,
             ),
-          ),
-          const SizedBox(height: 8),
-
-          // 下拉选择框（官方/自定义）
-          Container(
-            decoration: BoxDecoration(
-              color: isDarkMode
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : Colors.black.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDarkMode
-                    ? Colors.white.withValues(alpha: 0.1)
-                    : Colors.black.withValues(alpha: 0.08),
+            keyboardType: TextInputType.url,
+            onChanged: _onServerUrlChanged,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return '请输入服务器地址';
+              }
+              if (!value.startsWith('http://') &&
+                  !value.startsWith('https://')) {
+                return '服务器地址必须以 http:// 或 https:// 开头';
+              }
+              return null;
+            },
+            decoration: InputDecoration(
+              labelText: AppLocalizationsSimple.of(context)?.serverAddress ??
+                  '服务器地址',
+              hintText: 'https://your-memos-server.com',
+              hintStyle: TextStyle(
+                color: textSecondary,
+                fontSize: 15,
+                fontWeight: FontWeight.normal,
               ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<bool>(
-                value: _useCustomServer,
-                isExpanded: true,
-                icon: Icon(
-                  Icons.arrow_drop_down,
+              prefixIcon: Container(
+                margin: const EdgeInsets.all(12),
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.cloud_outlined,
+                  size: 18,
                   color: primaryColor,
                 ),
-                dropdownColor:
-                    isDarkMode ? AppTheme.darkCardColor : AppTheme.surfaceColor,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: textPrimary,
-                  fontWeight: FontWeight.w500,
+              ),
+              filled: true,
+              fillColor: isDarkMode
+                  ? Colors.white.withValues(alpha: 0.03)
+                  : Colors.black.withValues(alpha: 0.02),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDarkMode
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.08),
                 ),
-                items: [
-                  DropdownMenuItem(
-                    value: false,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.verified_outlined,
-                          size: 20,
-                          color: primaryColor,
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              AppLocalizationsSimple.of(context)
-                                      ?.officialServer ??
-                                  '官方服务器',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: textPrimary,
-                              ),
-                            ),
-                            Text(
-                              AppLocalizationsSimple.of(context)?.recommended ??
-                                  '推荐使用',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: true,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.dns_outlined,
-                          size: 20,
-                          color: textSecondary,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          AppLocalizationsSimple.of(context)?.customServer ??
-                              '自定义服务器',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    _onServerTypeChanged(value);
-                  }
-                },
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isDarkMode
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: primaryColor,
+                  width: 2,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Colors.red,
+                  width: 1.5,
+                ),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Colors.red,
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 16,
               ),
             ),
           ),
-
-          // 🎯 自定义服务器地址输入框（仅在选择自定义时显示）
-          if (_useCustomServer) ...[
-            const SizedBox(height: 20),
-            Text(
-              AppLocalizationsSimple.of(context)?.serverAddress ?? '服务器地址',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _serverController,
-              style: TextStyle(
-                fontSize: 16,
-                color: textPrimary,
-                fontWeight: FontWeight.w500,
-              ),
-              keyboardType: TextInputType.url,
-              onChanged: _onCustomServerUrlChanged,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return '请输入服务器地址';
-                }
-                if (!value.startsWith('http://') &&
-                    !value.startsWith('https://')) {
-                  return '服务器地址必须以 http:// 或 https:// 开头';
-                }
-                return null;
-              },
-              decoration: InputDecoration(
-                hintText: 'https://your-memos-server.com',
-                hintStyle: TextStyle(
-                  color: textSecondary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.normal,
-                ),
-                prefixIcon: Container(
-                  margin: const EdgeInsets.all(12),
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.cloud_outlined,
-                    size: 18,
-                    color: primaryColor,
-                  ),
-                ),
-                filled: true,
-                fillColor: isDarkMode
-                    ? Colors.white.withValues(alpha: 0.03)
-                    : Colors.black.withValues(alpha: 0.02),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: isDarkMode
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.08),
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: isDarkMode
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.black.withValues(alpha: 0.08),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: primaryColor,
-                    width: 2,
-                  ),
-                ),
-                errorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Colors.red,
-                    width: 1.5,
-                  ),
-                ),
-                focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Colors.red,
-                    width: 2,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-              ),
-            ),
-          ],
         ],
       );
 
@@ -1762,7 +1600,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                               '什么是服务器？',
                           answer: AppLocalizationsSimple.of(context)
                                   ?.whatIsServerAnswer ??
-                              '服务器用于存储和同步您的笔记数据。推荐使用官方服务器，也可以使用自己部署的 Memos 服务器。',
+                              '服务器用于存储和同步您的笔记数据。InkRoot 连接的是您自己部署的 Memos 服务器，数据由您自己掌控。',
                           isDarkMode: isDarkMode,
                           textPrimary: textPrimary,
                           textSecondary: textSecondary,
@@ -1818,7 +1656,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                               '忘记密码怎么办？',
                           answer: AppLocalizationsSimple.of(context)
                                   ?.whatIfForgotPasswordAnswer ??
-                              '如使用官方服务器，请联系管理员重置密码。如使用自定义服务器，请联系您的服务器管理员。',
+                              '请联系您的 Memos 服务器管理员（自建服务器通常就是您自己），由管理员在后台重置密码。',
                           isDarkMode: isDarkMode,
                           textPrimary: textPrimary,
                           textSecondary: textSecondary,

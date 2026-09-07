@@ -205,9 +205,9 @@ docker run -d \
   neosmemo/memos:latest
 ```
 
-**Option B: Use Demo Server**
-- Server: `https://memos.didichou.site`
-- *For testing only, data may be cleared*
+**Option B: Use Another Instance**
+- Server: the address of any Memos instance you run or trust
+- *InkRoot no longer ships a built-in official server; connect to your own instance*
 
 ### Step 2: Configure InkRoot
 
