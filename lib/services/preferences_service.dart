@@ -358,6 +358,16 @@ class PreferencesService {
     ]);
   }
 
+  // 清除保存的账号密码（保留当前会话的 token）
+  // 供设置页关闭「记住密码」开关时使用：用户只是不再希望密码留在本机，
+  // 当前已建立的会话不应被打断
+  Future<void> clearSavedCredentials() async {
+    await Future.wait([
+      _storage.delete(key: _usernameKey),
+      _storage.delete(key: _passwordKey),
+    ]);
+  }
+
   // 🔥 清除所有敏感数据（包括密码）- 用于退出登录或首次启动清理
   Future<void> clearAllSecureData() async {
     try {

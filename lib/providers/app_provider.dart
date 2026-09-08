@@ -1814,12 +1814,10 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
   }
 
-  // 使用Token登录
-  Future<(bool, String?)> loginWithToken(
-    String serverUrl,
-    String token, {
-    bool remember = false,
-  }) async {
+  // 使用Token登录。
+  // 注意：是否记住登录只由 loginWithPassword 时用户的选择和设置页开关决定，
+  // Token 登录（快速登录/启动自动登录）不改变 rememberLogin 标志。
+  Future<(bool, String?)> loginWithToken(String serverUrl, String token) async {
     try {
       debugPrint('AppProvider: 尝试使用Token登录 - URL: $serverUrl');
 
@@ -1867,11 +1865,16 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         await _preferencesService.saveUser(user);
         _user = user;
 
-        // 更新配置
+        // 更新配置。rememberLogin 不在此覆写：该标志只反映用户在登录时
+        // 或设置页的选择，启动自动登录（remember 默认 false）不应悄悄
+        // 把它关掉——否则「记住密码」的用户重启一次应用后，正常登出时会
+        // 误清保存的用户名密码。
         final updatedConfig = _appConfig.copyWith(
+          updateAuthFields: true,
           memosApiUrl: normalizedUrl,
-          lastToken: remember ? token : null,
-          rememberLogin: remember,
+          lastToken: token,
+          lastUsername: _appConfig.lastUsername,
+          lastServerUrl: normalizedUrl,
           isLocalMode: false,
         );
         await updateConfig(updatedConfig);
@@ -3230,6 +3233,12 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     notifyListeners();
   }
 
+  /// 清除安全存储中保存的账号密码，但保留当前会话（不登出、不动 token）。
+  /// 供设置页关闭「记住密码」开关时调用——用户只是不再希望密码留在本机。
+  Future<void> clearSavedCredentials() async {
+    await _preferencesService.clearSavedCredentials();
+  }
+
   // 获取保存的服务器地址
   Future<String?> getSavedServer() async =>
       _preferencesService.getSavedServer();
@@ -3773,19 +3782,30 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
   }
 
-  /// 彻底清除登录状态：安全存储中的 token/服务器地址、持久化的用户信息、
-  /// 配置中的认证字段（显式置空，避免被 copyWith 的旧值“复活”），
-  /// 并复位自动登录、切换到本地模式。
+  /// 彻底清除登录状态：停止自动同步、清空内存中的 API 服务引用（token
+  /// 已失效，留着只会让后续请求再打一次注定 401 的接口）、安全存储中的
+  /// token/服务器地址/已保存的账号密码、持久化的用户信息、配置中的认证
+  /// 字段（显式置空，避免被 copyWith 的旧值”复活”），并复位自动登录、
+  /// 切换到本地模式。
   ///
   /// 仅在确认凭据已失效（服务器明确拒绝）时调用；暂时性故障应保留凭据
   /// 等待静默重登自动恢复。
   Future<void> _forceClearLoginState() async {
+    stopAutoSync();
+    _apiService = null;
+    _memosApiService = null;
+    _resourceService = null;
+
     await _preferencesService.clearLoginInfo();
+    // 凭据已被服务器确认失效：保存的账号密码一并清除，避免登录页预填
+    // 已知错误的密码、以及定时任务反复用坏密码重试登录
+    await _preferencesService.clearSavedCredentials();
     await _preferencesService.clearUser();
     _user = null;
     // updateAuthFields: true 时，认证字段未传即全部置 null
     _appConfig = _appConfig.copyWith(
       updateAuthFields: true,
+      rememberLogin: false,
       autoLogin: false,
       isLocalMode: true,
     );
@@ -3799,7 +3819,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         debugPrint('AppProvider: 处理Token过期，清除登录状态');
       }
 
-      // 1. 停止自动同步
+      // 1. 停止自动同步（先于撤销请求，避免定时同步在清理过程中再触发）
       stopAutoSync();
 
       // 2. 尝试撤销过期的token（尽力而为）
@@ -3817,18 +3837,15 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         }
       }
 
-      // 3. 清除API服务
-      _memosApiService = null;
-      _resourceService = null;
-
-      // 4. 彻底清除用户信息、凭据与登录状态（含持久化的用户与配置字段）
+      // 3. 彻底清除：内存服务引用、持久化用户、凭据（含保存的账号密码）
+      //    与登录状态
       await _forceClearLoginState();
 
-      // 5. 设置同步消息提示用户
+      // 4. 设置同步消息提示用户
       _syncMessage = 'Token已过期，请重新登录';
       _isSyncing = false;
 
-      // 6. 通知UI更新
+      // 5. 通知UI更新
       notifyListeners();
 
       if (kDebugMode) {

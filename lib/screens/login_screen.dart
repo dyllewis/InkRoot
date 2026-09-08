@@ -180,9 +180,8 @@ class _LoginScreenState extends State<LoginScreen>
     try {
       final appProvider = Provider.of<AppProvider>(context, listen: false);
 
-      // 尝试使用token登录
-      final result =
-          await appProvider.loginWithToken(serverUrl, token, remember: true);
+      // 尝试使用token登录（记住登录的标志由用户上次的登录选择决定，不在此改变）
+      final result = await appProvider.loginWithToken(serverUrl, token);
 
       if (result.$1 && mounted) {
         // 成功则直接跳转到主页
