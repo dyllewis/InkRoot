@@ -348,11 +348,11 @@ void main() {
                 break;
               case 'flat':
                 expect(body, containsPair('username', 'alice'));
-                expect(body, containsPair('neverExpire', true));
+                expect(body, isNot(contains('neverExpire')));
                 break;
               case 'wrapped':
                 expect(body['passwordCredentials'], isA<Map>());
-                expect(body, containsPair('neverExpire', true));
+                expect(body, isNot(contains('neverExpire')));
                 break;
             }
 
@@ -480,9 +480,9 @@ void main() {
       );
     });
 
-    // 回归：登录必须签发永不过期的会话，否则自建 Memos 用户会在
-    // 会话过期（默认约 7 天）后被自动登出。
-    test('API-13b v0.22+ 登录请求体必须携带 neverExpire: true', () async {
+    // 回归：登录只签发默认时长的会话（约 7 天），到期由客户端静默重登续期。
+    // 永不过期的会话一旦泄露 token 即永久有效，不允许再签发。
+    test('API-13b v0.22+ 登录请求体不得携带 neverExpire', () async {
       for (final version in ['v0.22.0', 'v0.25.0', 'v0.26.0', 'v0.29.1']) {
         await MemosApiServiceFixed.invalidateVersionCache(baseUrl);
         Map<String, dynamic>? capturedBody;
@@ -519,8 +519,8 @@ void main() {
         expect(token, startsWith('tok-'));
         expect(
           capturedBody,
-          containsPair('neverExpire', true),
-          reason: '$version 登录请求体必须携带 neverExpire: true',
+          isNot(contains('neverExpire')),
+          reason: '$version 登录请求体不得携带 neverExpire（永久会话）',
         );
       }
     });

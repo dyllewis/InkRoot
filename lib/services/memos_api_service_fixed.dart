@@ -32,8 +32,11 @@ typedef _UserInfoAttempt = ({
 /// | Version       | Login request body              | Token location        | Memo path         |
 /// |---------------|---------------------------------|-----------------------|-------------------|
 /// | v0.21.0       | {username, password}            | Body: `token`         | /api/v1/memo      |
-/// | v0.22–v0.25   | {username, password, neverExpire}| Set-Cookie header    | /api/v1/memos     |
+/// | v0.22–v0.25   | {username, password}            | Set-Cookie header    | /api/v1/memos     |
 /// | v0.26+        | {passwordCredentials:{…}}       | Body: `accessToken`   | /api/v1/memos     |
+///
+/// 所有协议的登录都签发服务器默认时长（约 7 天）的会话，到期后由客户端
+/// 静默重登自动续期（见 AppProvider.trySilentRelogin）。
 class MemosApiServiceFixed {
   MemosApiServiceFixed({required this.baseUrl, this.token});
 
@@ -244,7 +247,10 @@ class MemosApiServiceFixed {
       throw Exception(cookieError);
     }
 
-    if (errors.any(_isCredentialFailure)) {
+    if (errors.any(_isCredentialFailure) ||
+        // signin 返回 401 即服务器在认证层面拒绝了这组凭据。
+        // 三种协议都尝试过仍出现 401，说明不是协议不匹配，而是凭据确实无效。
+        errors.any((e) => RegExp(r': 401\b').hasMatch(e))) {
       throw Exception('账号或密码错误，请检查后重试');
     }
 
@@ -269,8 +275,8 @@ class MemosApiServiceFixed {
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
         'passwordCredentials': {'username': username, 'password': password},
-        // 会话默认约 7 天过期；传 true 拿到永不过期的会话，避免用户被自动登出
-        'neverExpire': true,
+        // 会话使用服务器默认时长（约 7 天）；到期后由客户端静默重登续期，
+        // 不签发永久会话，避免 token 一旦泄露即永久有效。
       }),
     );
     if (resp.statusCode == 200) {
@@ -291,7 +297,7 @@ class MemosApiServiceFixed {
       Uri.parse('$baseUrl/api/v1/auth/signin'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode(
-        {'username': username, 'password': password, 'neverExpire': true},
+        {'username': username, 'password': password},
       ),
     );
 

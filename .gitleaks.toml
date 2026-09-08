@@ -1,5 +1,5 @@
+# gitleaks 放行清单：仅允许登记确属公开的客户端标识。
+# 历史上登记过的星河云验证 appKey 已随自托管化重构（1.1.14）删除，不再放行。
 [allowlist]
 description = "Project-approved public client identifiers"
-regexes = [
-  '''RLu4EGglybXSgRzK''',
-]
+regexes = []

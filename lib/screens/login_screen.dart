@@ -209,7 +209,8 @@ class _LoginScreenState extends State<LoginScreen>
       }
 
       // Token 确认失效：先尝试用保存的账号密码静默重登
-      if (await appProvider.trySilentRelogin()) {
+      final relogin = await appProvider.trySilentRelogin();
+      if (relogin == SilentReloginResult.success) {
         if (mounted) {
           context.go('/');
         }
@@ -222,8 +223,13 @@ class _LoginScreenState extends State<LoginScreen>
         });
         return;
       }
+      if (relogin == SilentReloginResult.retryLater) {
+        // 冷却期内或服务器暂时不可用：保留已填充的账号密码，让用户手动重试
+        debugPrint('LoginScreen: 静默重登暂时不可用，保留登录信息');
+        return;
+      }
 
-      // Token失效，清除保存的登录信息，让用户手动登录
+      // 服务器明确拒绝保存的凭据：清除登录信息，让用户手动登录
       await appProvider.clearLoginInfo();
     } on Object catch (e) {
       // 异常情况下：网络异常保留登录信息，其余清除

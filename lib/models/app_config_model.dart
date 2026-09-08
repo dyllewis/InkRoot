@@ -258,6 +258,7 @@ class AppConfig {
     String? lastToken,
     String? lastUsername,
     String? lastServerUrl,
+    bool updateAuthFields = false, // 允许把认证字段显式置 null（清除登录状态时使用）
     bool? rememberLogin,
     bool? autoLogin,
     bool? autoSyncEnabled,
@@ -302,10 +303,16 @@ class AppConfig {
   }) =>
       AppConfig(
         isLocalMode: isLocalMode ?? this.isLocalMode,
-        memosApiUrl: memosApiUrl ?? this.memosApiUrl,
-        lastToken: lastToken ?? this.lastToken,
-        lastUsername: lastUsername ?? this.lastUsername,
-        lastServerUrl: lastServerUrl ?? this.lastServerUrl,
+        memosApiUrl: updateAuthFields
+            ? memosApiUrl
+            : (memosApiUrl ?? this.memosApiUrl),
+        lastToken: updateAuthFields ? lastToken : (lastToken ?? this.lastToken),
+        lastUsername: updateAuthFields
+            ? lastUsername
+            : (lastUsername ?? this.lastUsername),
+        lastServerUrl: updateAuthFields
+            ? lastServerUrl
+            : (lastServerUrl ?? this.lastServerUrl),
         rememberLogin: rememberLogin ?? this.rememberLogin,
         autoLogin: autoLogin ?? this.autoLogin,
         autoSyncEnabled: autoSyncEnabled ?? this.autoSyncEnabled,

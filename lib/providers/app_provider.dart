@@ -48,6 +48,23 @@ part 'app_provider_sync.part.dart';
 
 const bool _screenshotMode = bool.fromEnvironment('INKROOT_SCREENSHOT_MODE');
 
+/// 静默重登的结果。
+///
+/// 调用方必须区分这三种情况：只有 [credentialFailure] 才允许清除本地
+/// 凭据并要求用户重新登录；[retryLater] 表示冷却期内或服务器暂时不可用，
+/// 应保留凭据、回落本地模式，等待下个同步周期自动重试。
+enum SilentReloginResult {
+  /// 重登成功，API/资源/增量同步服务已刷新并恢复自动同步。
+  success,
+
+  /// 暂时无法重登（冷却期内、网络故障、服务器 5xx/限流等）。
+  retryLater,
+
+  /// 服务器明确拒绝保存的凭据（或本地没有保存账号密码），
+  /// 静默重登永远无法恢复，需要用户手动重新登录。
+  credentialFailure,
+}
+
 class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   AppProvider() {
     if (_screenshotMode) {
@@ -1711,8 +1728,9 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       // 2. 设置更短的token过期时间
       // 3. 要求服务器端实现单点登录机制
 
-      // 更新应用配置
+      // 更新应用配置（updateAuthFields：未记住登录时把残留的旧凭据字段显式清空）
       _appConfig = _appConfig.copyWith(
+        updateAuthFields: true,
         memosApiUrl: normalizedUrl,
         lastToken: remember ? token : null,
         lastUsername: remember ? username : null,
@@ -2193,8 +2211,9 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       _setSyncMessage('清除登录信息...');
 
       // 🔐 总是清除 token（退出登录后不应该自动登录）
-      // 但如果之前选择了"记住密码"，保留 username 和 password
-      final rememberLogin = _appConfig.rememberLogin;
+      // 选择了"记住密码"且保留本地数据时，才保留 username 和 password；
+      // 明确要求清除本机数据（如删除账号）时，凭据一并彻底清除。
+      final rememberLogin = _appConfig.rememberLogin && keepLocalData;
 
       if (rememberLogin) {
         // 只清除 token，保留 username 和 password
@@ -2208,11 +2227,16 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
 
       _setSyncMessage('更新配置...');
 
-      // 更新配置为本地模式，不保留 token
+      // 更新配置为本地模式，不保留 token。updateAuthFields 允许显式置空
+      // （lastToken/memosApiUrl 未传即置 null），防止旧 token 经
+      // saveAppConfig 被写回安全存储（copyWith 默认会用旧值兜底）。
       _appConfig = _appConfig.copyWith(
-        isLocalMode: true,
-        rememberLogin: rememberLogin,
+        updateAuthFields: true,
+        lastUsername: rememberLogin ? _appConfig.lastUsername : null,
         lastServerUrl: rememberLogin ? _appConfig.lastServerUrl : null,
+        rememberLogin: rememberLogin,
+        autoLogin: false,
+        isLocalMode: true,
       );
       await _preferencesService.saveAppConfig(_appConfig);
 
@@ -3200,9 +3224,10 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
   }
 
-  // 清除登录信息
+  // 清除登录信息（公开入口，供登录页在快速登录确认失效后调用）
   Future<void> clearLoginInfo() async {
-    await _preferencesService.clearLoginInfo();
+    await _forceClearLoginState();
+    notifyListeners();
   }
 
   // 获取保存的服务器地址
@@ -3480,8 +3505,17 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         }
 
         // Token 确认失效：先用保存的账号密码静默重登（成功则恢复在线模式）
-        if (await trySilentRelogin()) {
+        final relogin = await trySilentRelogin();
+        if (relogin == SilentReloginResult.success) {
           debugPrint('AppProvider: 静默重登成功，恢复在线模式');
+          notifyListeners();
+          return;
+        }
+        if (relogin == SilentReloginResult.retryLater) {
+          // 冷却期内或服务器暂时不可用：保留凭据与自动登录，回落本地模式，
+          // 由后续手动/自动同步重试（与上面的网络故障分支同一策略）。
+          debugPrint('AppProvider: 静默重登暂时不可用，保留登录信息');
+          _setSyncMessage('暂时无法连接服务器，已切换离线模式');
           notifyListeners();
           return;
         }
@@ -3490,11 +3524,8 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
           debugPrint('AppProvider: 自动登录失败: $errorMsg，清除保存的登录信息');
         }
 
-        // Token无效，清除保存的登录信息
-        await _preferencesService.clearLoginInfo();
-        _user = null;
-        _appConfig = _appConfig.copyWith();
-        await _preferencesService.saveAppConfig(_appConfig);
+        // 服务器明确拒绝保存的凭据：彻底清除登录状态
+        await _forceClearLoginState();
         notifyListeners();
       }
     } on Object catch (e) {
@@ -3509,17 +3540,21 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         return;
       }
 
-      if (await trySilentRelogin()) {
+      final relogin = await trySilentRelogin();
+      if (relogin == SilentReloginResult.success) {
+        notifyListeners();
+        return;
+      }
+      if (relogin == SilentReloginResult.retryLater) {
+        debugPrint('AppProvider: 静默重登暂时不可用，保留登录信息');
+        _setSyncMessage('暂时无法连接服务器，已切换离线模式');
         notifyListeners();
         return;
       }
 
-      // 确认无法恢复登录，清除保存的登录信息
+      // 确认无法恢复登录，彻底清除保存的登录信息
       try {
-        await _preferencesService.clearLoginInfo();
-        _user = null;
-        _appConfig = _appConfig.copyWith();
-        await _preferencesService.saveAppConfig(_appConfig);
+        await _forceClearLoginState();
         notifyListeners();
       } on Object catch (clearError) {
         if (kDebugMode) {
@@ -3677,17 +3712,17 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   /// 使用保存的账号密码静默重新登录（勾选“记住登录”时凭据已存入安全存储）。
   ///
   /// 适用场景：
-  ///   • 旧版本签发的短期会话过期后自动续期（存量用户升级后的兜底）
+  ///   • 会话按服务器默认时长（约 7 天）过期后自动续期
   ///   • 启动自动登录 token 失效但网络正常
   ///
-  /// 返回 true 表示重登成功，API/资源/增量同步服务已刷新并恢复自动同步。
-  /// 带 5 分钟冷却，防止与定时同步形成循环。
-  Future<bool> trySilentRelogin() async {
+  /// 返回 [SilentReloginResult]，调用方据此决定恢复在线、保留凭据等待重试，
+  /// 还是清除凭据要求重新登录。带 5 分钟冷却，防止与定时同步形成循环。
+  Future<SilentReloginResult> trySilentRelogin() async {
     final lastAttempt = _lastSilentReloginAt;
     final now = DateTime.now();
     if (lastAttempt != null &&
         now.difference(lastAttempt) < const Duration(minutes: 5)) {
-      return false;
+      return SilentReloginResult.retryLater;
     }
     _lastSilentReloginAt = now;
 
@@ -3700,7 +3735,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
           password == null ||
           password.isEmpty) {
         debugPrint('AppProvider: 没有保存的账号密码，无法静默重登');
-        return false;
+        return SilentReloginResult.credentialFailure;
       }
 
       debugPrint('AppProvider: 使用保存的账号密码静默重登');
@@ -3713,7 +3748,12 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
 
       if (!result.$1) {
         debugPrint('AppProvider: 静默重登失败: ${result.$2}');
-        return false;
+        // 只有服务器明确拒绝凭据才判定为不可恢复；网络波动、反代 5xx、
+        // 限流等一律按暂时性失败处理，保留凭据等待下次重试。
+        if (sync_status.isCredentialFailureError(result.$2 ?? '')) {
+          return SilentReloginResult.credentialFailure;
+        }
+        return SilentReloginResult.retryLater;
       }
 
       // 补齐 loginWithPassword 不会初始化的增量同步服务
@@ -3724,11 +3764,32 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       startAutoSync();
       notifyListeners();
       debugPrint('AppProvider: 静默重登成功');
-      return true;
+      return SilentReloginResult.success;
     } on Object catch (e) {
       debugPrint('AppProvider: 静默重登异常: $e');
-      return false;
+      // 异常原因不明时不轻易判死刑：网络类异常可重试，其余也先保留凭据，
+      // 让下个同步周期再试（冷却机制保证不会形成请求风暴）。
+      return SilentReloginResult.retryLater;
     }
+  }
+
+  /// 彻底清除登录状态：安全存储中的 token/服务器地址、持久化的用户信息、
+  /// 配置中的认证字段（显式置空，避免被 copyWith 的旧值“复活”），
+  /// 并复位自动登录、切换到本地模式。
+  ///
+  /// 仅在确认凭据已失效（服务器明确拒绝）时调用；暂时性故障应保留凭据
+  /// 等待静默重登自动恢复。
+  Future<void> _forceClearLoginState() async {
+    await _preferencesService.clearLoginInfo();
+    await _preferencesService.clearUser();
+    _user = null;
+    // updateAuthFields: true 时，认证字段未传即全部置 null
+    _appConfig = _appConfig.copyWith(
+      updateAuthFields: true,
+      autoLogin: false,
+      isLocalMode: true,
+    );
+    await _preferencesService.saveAppConfig(_appConfig);
   }
 
   // 处理Token过期的情况
@@ -3760,22 +3821,14 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       _memosApiService = null;
       _resourceService = null;
 
-      // 4. 清除用户信息和登录状态
-      await _preferencesService.clearLoginInfo();
-      _user = null;
+      // 4. 彻底清除用户信息、凭据与登录状态（含持久化的用户与配置字段）
+      await _forceClearLoginState();
 
-      // 5. 更新应用配置，切换到本地模式
-      _appConfig = _appConfig.copyWith(
-        isLocalMode: true,
-        autoLogin: false, // 禁用自动登录
-      );
-      await _preferencesService.saveAppConfig(_appConfig);
-
-      // 6. 设置同步消息提示用户
+      // 5. 设置同步消息提示用户
       _syncMessage = 'Token已过期，请重新登录';
       _isSyncing = false;
 
-      // 7. 通知UI更新
+      // 6. 通知UI更新
       notifyListeners();
 
       if (kDebugMode) {

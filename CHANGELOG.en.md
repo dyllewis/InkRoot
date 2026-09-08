@@ -10,9 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.14] - 2026-09-07
 
 ### Fixed
-- Fixed the issue where signing in to a self-hosted Memos server was automatically logged out after a while: sign-in now requests a never-expiring session (`neverExpire: true`, compatible with Memos 0.22–0.29)
+- Fixed the issue where signing in to a self-hosted Memos server was automatically logged out after a while: sessions are now issued with the server's default lifetime (about 7 days, compatible with Memos 0.22–0.29) and renewed automatically via silent re-login with saved credentials; never-expiring sessions are no longer issued
 - Expired tokens now trigger a silent re-login with saved credentials first (with a 5-minute cooldown) before requiring manual sign-in
-- Network failures such as a temporarily offline server, DNS errors, or timeouts no longer wipe local credentials; sync resumes automatically once the network recovers
+- Transient failures—a temporarily offline server, DNS errors, timeouts, reverse-proxy 5xx, or rate limiting—no longer wipe local credentials; sync resumes automatically once the server is reachable again. Only an explicit credential rejection (e.g. a changed password) requires signing in again
+- Credential cleanup after a confirmed failure is now thorough: no more stale tokens being written back or lingering "looks logged in" zombie states; deleting the account or clearing local data now also removes the saved password
 - "API service initialization failed" no longer forces a logout; the app tries to recover or falls back to local mode
 
 ### Changed

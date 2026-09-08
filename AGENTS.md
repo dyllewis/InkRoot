@@ -1,6 +1,6 @@
 # AGENTS.md
 
-InkRoot（墨迹·墨笔记·墨计划）是一款本地优先的跨平台笔记应用（Flutter），支持连接官方服务器或自托管 Memos 服务同步，提供 WebDAV 备份、Markdown、多级标签、知识图谱、AI 辅助等能力。当前仓库是 `dyllewis/InkRoot`（fork 自 yyyyymmmmm/InkRoot，原作者已停更），远程 `origin` 指向本 fork。
+InkRoot（墨迹·墨笔记·墨计划）是一款本地优先的跨平台笔记应用（Flutter），支持连接自托管的 Memos 服务同步，提供 WebDAV 备份、Markdown、多级标签、知识图谱、AI 辅助等能力。当前仓库是 `dyllewis/InkRoot`（fork 自 yyyyymmmmm/InkRoot，原作者已停更），远程 `origin` 指向本 fork。
 
 ## 常用命令
 
@@ -31,10 +31,10 @@ flutter build apk        # Android；aab 用于上架
 
 ## 重要约定与注意事项
 
-- **版本号**：`pubspec.yaml` 的 `version: 1.1.13+10113` 是唯一真相源，发版时需同步更新 `CHANGELOG.md`、`CHANGELOG.en.md`、`README.md`/`README.en.md` 中的版本描述（参考 `docs/MAINTENANCE.md`）。
+- **版本号**：`pubspec.yaml` 的 `version: 1.1.14+10114` 是唯一真相源，发版时需同步更新 `CHANGELOG.md`、`CHANGELOG.en.md`、`README.md`/`README.en.md` 中的版本描述（参考 `docs/MAINTENANCE.md`）。
 - **国际化**：改 UI 文案要同时更新 `app_zh.arb` 和 `app_en.arb`；生成的 `app_localizations*.dart` 已提交入库，`flutter gen-l10n` 后记得提交。
 - **代码规范**：`analysis_options.yaml` 开启了 `implicit-casts: false` 和 `implicit-dynamic: false`，`missing_required_param`/`missing_return` 为 error 级别；另有更严格的 `analysis_options_strict.yaml`。
-- **敏感信息**：`tool/inkroot.dart` 内含硬编码的云端校验 AppId/AppKey 和 Android 证书指纹，不要将新的密钥提交入库。
+- **敏感信息**：`tool/inkroot.dart` 内含硬编码的 Android 发布证书指纹（公钥，非机密）；云端校验 AppId/AppKey 已随 1.1.14 自托管化重构删除，不要将新的密钥提交入库。
 - **同步兼容**：Memos 兼容层需覆盖 0.21–0.29（自部署场景），改动同步逻辑前先读 `docs/architecture/` 和 `docs/development/troubleshooting.md`。
 - **构建产物**：`build/` 目录绝不能提交（历史上曾因提交 Flutter Web 编译产物导致仓库膨胀）。
 - 文档、提交信息、用户可见文案以中文为主，面向用户的双语文案需中英同步。
