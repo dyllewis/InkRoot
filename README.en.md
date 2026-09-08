@@ -8,11 +8,11 @@ InkRoot is a cross-platform note-taking app for personal knowledge capture. It w
 
 `1.1.14`
 
-This release fixes the issue where signing in to a self-hosted Memos server would be automatically logged out after a while: sign-in now requests a never-expiring session, expired tokens trigger a silent re-login with saved credentials, and network failures no longer wipe local credentials. The app is also fully self-hosted now: dependencies on the former official server (cloud verification, cloud announcements, and in-app update checks) have been removed, and the sign-in/registration pages ask directly for your self-hosted server address.
+This release fixes the issue where signing in to a self-hosted Memos server would be automatically logged out after a while: sessions are issued with the server's default lifetime and renewed automatically via silent re-login with saved credentials; a temporarily unreachable server (offline, timeouts, reverse-proxy 5xx, and similar) no longer wipes local credentials. The app is also fully self-hosted now: dependencies on the former official server (cloud verification, cloud announcements, and in-app update checks) have been removed, and the sign-in/registration pages ask directly for your self-hosted server address.
 
 Highlights:
 
-- Sign-in to self-hosted Memos servers now requests a never-expiring session, fixing automatic logouts after a while.
+- Expired sessions are renewed automatically via silent re-login with saved credentials, fixing automatic logouts after a while.
 - Expired tokens trigger a silent re-login with saved credentials first, keeping sessions stable.
 - Network failures such as a temporarily offline server no longer wipe local credentials; sync resumes once the network is back.
 - The sign-in and registration pages drop the "official server" option and ask directly for your self-hosted Memos server address, remembering the last one.

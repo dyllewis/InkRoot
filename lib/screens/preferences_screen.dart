@@ -782,7 +782,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
     await appProvider.updateConfig(updatedConfig);
 
     // 如果关闭记住密码，清除保存的账号密码并关闭自动登录；
-    // 当前会话保持不变（下次启动需手动登录）
+    // 当前会话保持不变，服务器端会话到期后需手动重新登录
     if (!value) {
       final newConfig = appProvider.appConfig.copyWith(
         rememberLogin: false,
