@@ -24,6 +24,14 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(':app')
+    // 老插件（如 sentry_flutter 8.x）声明了过低的 Kotlin 语言版本 1.6，
+    // Kotlin 2.2+ 编译器已拒绝；统一提升到 1.9（向后兼容旧语法）
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            languageVersion = "1.9"
+            apiVersion = "1.9"
+        }
+    }
 }
 
 tasks.register("clean", Delete) {
