@@ -293,7 +293,29 @@ extension AppProviderSyncPart on AppProvider {
       });
     } on Object catch (e) {
       debugPrint('同步失败: $e');
-      _setSyncMessage(sync_status.syncFailedMessage(e));
+
+      // Token 失效：先静默重登，成功后重试一次同步
+      //（与 fetchNotesFromServer 同一策略，冷却机制保证不会无限循环）
+      if (e is TokenExpiredException || sync_status.isTokenExpiredError(e)) {
+        debugPrint('AppProvider: 同步遇到Token过期，先尝试静默重登');
+        final relogin = await trySilentRelogin();
+        if (relogin == SilentReloginResult.success) {
+          _setSyncMessage('已自动恢复登录状态');
+          await syncWithServer();
+          return;
+        }
+        if (relogin == SilentReloginResult.credentialFailure) {
+          debugPrint('AppProvider: 保存的凭据已被服务器拒绝，强制用户重新登录');
+          _setSyncMessage('登录已过期，请重新登录');
+          await _handleTokenExpired();
+        } else {
+          // 冷却期内或服务器暂时不可用：保留凭据，等待下个同步周期重试。
+          debugPrint('AppProvider: 静默重登暂时不可用，保留凭据等待下次同步');
+          _setSyncMessage('暂时无法连接服务器，稍后将自动重试登录');
+        }
+      } else {
+        _setSyncMessage(sync_status.syncFailedMessage(e));
+      }
 
       // 延迟一点时间再清除同步状态
       Future.delayed(const Duration(milliseconds: 1500), () {

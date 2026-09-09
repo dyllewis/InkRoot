@@ -1766,6 +1766,11 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         serverVersion: serverVersion,
       );
 
+      // 🚀 重建增量同步服务（关键！）：它持有旧 token 的服务实例，
+      // 不重建的话下拉刷新等增量链路会继续用过期 token 请求。
+      _incrementalSyncService =
+          IncrementalSyncService(_databaseService, _memosApiService);
+
       debugPrint('AppProvider: 账号密码登录成功');
       notifyListeners();
 
@@ -1842,6 +1847,10 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
         token: token,
         serverVersion: serverVersion,
       );
+
+      // 重建增量同步服务，避免沿用旧 token 的服务实例
+      _incrementalSyncService =
+          IncrementalSyncService(_databaseService, _memosApiService);
 
       // 验证Token并获取用户信息（版本感知，由 MemosApiServiceFixed 自动处理）
       try {
@@ -2246,6 +2255,8 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       // 清除API服务
       _apiService = null;
       _memosApiService = null;
+      _resourceService = null;
+      _incrementalSyncService = null;
 
       // 重新加载本地笔记
       if (keepLocalData) {
@@ -2923,7 +2934,10 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
 
     _setSyncUi(syncing: true, message: '正在快速同步...');
     try {
-      _incrementalSyncService ??=
+      // 每次都基于当前 _memosApiService 重建增量同步服务：静默重登/重新
+      // 登录会整体替换 API 服务实例，沿用 ??= 缓存的旧实例会让刷新一直
+      // 拿着已过期的旧 token 请求。
+      _incrementalSyncService =
           IncrementalSyncService(_databaseService, _memosApiService);
 
       await _incrementalSyncService!.incrementalSync();
@@ -2931,7 +2945,29 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       // 同步后从本地重新加载，保证 UI/内存态一致
       await loadNotesFromLocal(reset: true);
     } on Object catch (e) {
-      _setSyncMessage(sync_status.syncFailedMessage(e));
+      if (e is TokenExpiredException || sync_status.isTokenExpiredError(e)) {
+        // Token 失效：先静默重登，成功后重试一次同步，避免把可自动恢复
+        // 的过期会话当作失败抛给用户（与 fetchNotesFromServer 同一策略）。
+        debugPrint('AppProvider: 快速同步遇到Token过期，先尝试静默重登');
+        final relogin = await trySilentRelogin();
+        if (relogin == SilentReloginResult.success) {
+          _setSyncMessage('已自动恢复登录状态');
+          await _incrementalSyncService!.incrementalSync();
+          await loadNotesFromLocal(reset: true);
+          return;
+        }
+        if (relogin == SilentReloginResult.credentialFailure) {
+          debugPrint('AppProvider: 保存的凭据已被服务器拒绝，强制用户重新登录');
+          _setSyncMessage('登录已过期，请重新登录');
+          await _handleTokenExpired();
+        } else {
+          // 冷却期内或服务器暂时不可用：保留凭据，等待下个同步周期重试。
+          debugPrint('AppProvider: 静默重登暂时不可用，保留凭据等待下次同步');
+          _setSyncMessage('暂时无法连接服务器，稍后将自动重试登录');
+        }
+      } else {
+        _setSyncMessage(sync_status.syncFailedMessage(e));
+      }
       rethrow;
     } finally {
       _setSyncUi(syncing: false);
@@ -3129,12 +3165,14 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     _setLoading(true);
 
     try {
-      // 使用Memos API更新用户信息
-      final updatedUser = await _memosApiService!.updateUserInfo(
-        nickname: nickname,
-        email: email,
-        avatarUrl: avatarUrl,
-        description: description,
+      // 使用Memos API更新用户信息（Token 失效时静默重登后重试一次）
+      final updatedUser = await runWithAuthRecovery(
+        () => _memosApiService!.updateUserInfo(
+          nickname: nickname,
+          email: email,
+          avatarUrl: avatarUrl,
+          description: description,
+        ),
       );
 
       // 更新本地用户信息
@@ -3259,7 +3297,18 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     stopAutoSync();
     if (!_appConfig.isLocalMode && _memosApiService != null) {
       _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-        syncLocalDataToServer();
+        // 先推送本地变更，随后补一次拉取（推送路径内部已拉取时也只是
+        // 多一次幂等的 GET）：定时同步同时承担会话续期，会话过期时由
+        // fetchNotesFromServer 内的静默重登自动恢复，避免应用长时间挂
+        // 后台后首次操作必然报「Token已过期」。
+        syncLocalDataToServer().then((_) {
+          if (!mounted || _appConfig.isLocalMode || _memosApiService == null) {
+            return;
+          }
+          fetchNotesFromServer().catchError((e) {
+            debugPrint('AppProvider: 定时拉取服务器数据失败: $e');
+          });
+        });
       });
       debugPrint('AppProvider: 自动同步已启动');
     } else {
@@ -3717,6 +3766,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
 
   // 🔄 静默重登：使用安全存储中保存的账号密码重新登录
   DateTime? _lastSilentReloginAt;
+  Future<SilentReloginResult>? _silentReloginInFlight;
 
   /// 使用保存的账号密码静默重新登录（勾选“记住登录”时凭据已存入安全存储）。
   ///
@@ -3725,8 +3775,15 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
   ///   • 启动自动登录 token 失效但网络正常
   ///
   /// 返回 [SilentReloginResult]，调用方据此决定恢复在线、保留凭据等待重试，
-  /// 还是清除凭据要求重新登录。带 5 分钟冷却，防止与定时同步形成循环。
+  /// 还是清除凭据要求重新登录。带 5 分钟冷却，防止与定时同步形成循环；
+  /// 并发调用共享同一次进行中的重登请求——冷却时间戳在请求发起前就已更新，
+  /// 不共享的话并发调用方会立刻拿到 retryLater 的“假失败”。
   Future<SilentReloginResult> trySilentRelogin() async {
+    final inFlight = _silentReloginInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+
     final lastAttempt = _lastSilentReloginAt;
     final now = DateTime.now();
     if (lastAttempt != null &&
@@ -3735,6 +3792,16 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
     _lastSilentReloginAt = now;
 
+    final future = _doTrySilentRelogin();
+    _silentReloginInFlight = future;
+    try {
+      return await future;
+    } finally {
+      _silentReloginInFlight = null;
+    }
+  }
+
+  Future<SilentReloginResult> _doTrySilentRelogin() async {
     try {
       final serverUrl = await _preferencesService.getSavedServer();
       final username = await _preferencesService.getSavedUsername();
@@ -3782,6 +3849,54 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     }
   }
 
+  /// 执行 [action]；若因 Token 失效失败，先静默重登再重试一次。
+  ///
+  /// [action] 应在每次调用时重新读取 [_memosApiService]（如闭包内取
+  /// `_memosApiService!`），这样重登成功后重试的自然是持有新 token 的
+  /// 服务实例。静默重登不可恢复时原样抛出首个异常，由调用方决定如何提示。
+  Future<T> runWithAuthRecovery<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on Object catch (e) {
+      if (e is! TokenExpiredException && !sync_status.isTokenExpiredError(e)) {
+        rethrow;
+      }
+      debugPrint('AppProvider: 请求遇到Token过期，先尝试静默重登: $e');
+      final relogin = await trySilentRelogin();
+      if (relogin != SilentReloginResult.success) {
+        rethrow;
+      }
+      return action();
+    }
+  }
+
+  /// 获取服务器端最新用户信息；Token 失效时先静默重登并重试一次。
+  ///
+  /// 账户页等直接展示服务器资料的入口统一走这里，会话过期时不再把
+  /// 「Token无效或已过期」直接抛到界面上（保存的凭据有效时可自动恢复）。
+  Future<User> fetchUserInfoWithRecovery() async {
+    if (!isLoggedIn || _memosApiService == null) {
+      throw Exception('未登录或API服务未初始化');
+    }
+
+    try {
+      return await _memosApiService!.getUserInfo();
+    } on Object catch (e) {
+      if (e is! TokenExpiredException && !sync_status.isTokenExpiredError(e)) {
+        rethrow;
+      }
+      debugPrint('AppProvider: 获取用户信息遇到Token过期，先尝试静默重登');
+      final relogin = await trySilentRelogin();
+      if (relogin == SilentReloginResult.success) {
+        return _memosApiService!.getUserInfo();
+      }
+      if (relogin == SilentReloginResult.credentialFailure) {
+        await _handleTokenExpired();
+      }
+      rethrow;
+    }
+  }
+
   /// 彻底清除登录状态：停止自动同步、清空内存中的 API 服务引用（token
   /// 已失效，留着只会让后续请求再打一次注定 401 的接口）、安全存储中的
   /// token/服务器地址/已保存的账号密码、持久化的用户信息、配置中的认证
@@ -3795,6 +3910,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     _apiService = null;
     _memosApiService = null;
     _resourceService = null;
+    _incrementalSyncService = null;
 
     await _preferencesService.clearLoginInfo();
     // 凭据已被服务器确认失效：保存的账号密码一并清除，避免登录页预填

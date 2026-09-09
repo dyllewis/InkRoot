@@ -85,7 +85,9 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
         _isUpdatingAvatar = true; // 使用同一个loading状态
       });
 
-      final apiUser = await appProvider.memosApiService!.getUserInfo();
+      // 走带静默重登恢复的入口：会话过期时自动用保存的凭据续期并重试，
+      // 不再把「Token无效或已过期」直接抛到界面上。
+      final apiUser = await appProvider.fetchUserInfoWithRecovery();
 
       // 更新本地用户信息
       final currentUser = appProvider.user;
