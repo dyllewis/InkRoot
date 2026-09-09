@@ -308,6 +308,8 @@ extension AppProviderSyncPart on AppProvider {
           debugPrint('AppProvider: 保存的凭据已被服务器拒绝，强制用户重新登录');
           _setSyncMessage('登录已过期，请重新登录');
           await _handleTokenExpired();
+          // 不像 fetchNotesFromServer 那样直接 return：本方法的调用方
+          //（备份恢复页）以是否抛异常区分成败，静默吞掉会误报「同步成功」。
         } else {
           // 冷却期内或服务器暂时不可用：保留凭据，等待下个同步周期重试。
           debugPrint('AppProvider: 静默重登暂时不可用，保留凭据等待下次同步');

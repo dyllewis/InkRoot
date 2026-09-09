@@ -2960,6 +2960,8 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
           debugPrint('AppProvider: 保存的凭据已被服务器拒绝，强制用户重新登录');
           _setSyncMessage('登录已过期，请重新登录');
           await _handleTokenExpired();
+          // 仍 rethrow 原始异常：首页以下拉刷新的成败决定是否弹
+          // 「同步成功」，静默吞掉会误报成功。
         } else {
           // 冷却期内或服务器暂时不可用：保留凭据，等待下个同步周期重试。
           debugPrint('AppProvider: 静默重登暂时不可用，保留凭据等待下次同步');
@@ -2970,7 +2972,13 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
       }
       rethrow;
     } finally {
-      _setSyncUi(syncing: false);
+      // 延迟清除，让「已自动恢复登录状态」等提示有机会短暂展示
+      //（与 fetchNotesFromServer 一致），避免被 finally 立即覆盖。
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _setSyncUi(syncing: false);
+        }
+      });
     }
   }
 
@@ -3297,18 +3305,7 @@ class AppProvider with ChangeNotifier implements NotificationAppProviderBridge {
     stopAutoSync();
     if (!_appConfig.isLocalMode && _memosApiService != null) {
       _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-        // 先推送本地变更，随后补一次拉取（推送路径内部已拉取时也只是
-        // 多一次幂等的 GET）：定时同步同时承担会话续期，会话过期时由
-        // fetchNotesFromServer 内的静默重登自动恢复，避免应用长时间挂
-        // 后台后首次操作必然报「Token已过期」。
-        syncLocalDataToServer().then((_) {
-          if (!mounted || _appConfig.isLocalMode || _memosApiService == null) {
-            return;
-          }
-          fetchNotesFromServer().catchError((e) {
-            debugPrint('AppProvider: 定时拉取服务器数据失败: $e');
-          });
-        });
+        syncLocalDataToServer();
       });
       debugPrint('AppProvider: 自动同步已启动');
     } else {
